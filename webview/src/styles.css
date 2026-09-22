@@ -1,0 +1,245 @@
+:root {
+  --bg: #f2f2f2;
+  --fg: #1f1f1f;
+  --muted: #6b6b6b;
+  --border: #d0d0d0;
+  --surface: #ffffff;
+  --accent: #3574f0;
+
+  --added: #2e9d3a;
+  --added-fill: #dcf5d9;
+  --removed: #d6343f;
+  --removed-fill: #fbdadc;
+  --changed: #d88a00;
+  --changed-fill: #fdedc8;
+  --layout: #6e56cf;
+}
+
+:root[data-theme="dark"] {
+  --bg: #2b2d30;
+  --fg: #dfe1e5;
+  --muted: #9da0a8;
+  --border: #43454a;
+  /* diagrams keep a light surface so black BPMN strokes stay readable */
+  --surface: #f7f7f7;
+  --accent: #548af7;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font: 12px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ---- summary bar ---- */
+
+#summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  white-space: nowrap;
+}
+button.chip {
+  font: inherit;
+  color: var(--fg);
+  background: transparent;
+  cursor: pointer;
+}
+button.chip:hover { border-color: var(--accent); }
+.chip.off { opacity: .45; }
+.chip.off i { background: transparent !important; box-shadow: inset 0 0 0 1.5px var(--muted); }
+.chip.off b { font-weight: 400; }
+.chip i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.chip.added i { background: var(--added); }
+.chip.removed i { background: var(--removed); }
+.chip.changed i { background: var(--changed); }
+.chip.layout i { background: var(--layout); }
+.chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+#summary-note { color: var(--muted); margin-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+#toggle-changes {
+  margin-left: auto;
+  font: inherit;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 8px;
+  cursor: pointer;
+}
+#toggle-changes:hover, #toggle-changes.active { border-color: var(--accent); }
+
+/* ---- panes ---- */
+
+#panes {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+.pane {
+  position: relative;
+  flex: 1 1 50%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pane + .pane { border-left: 1px solid var(--border); }
+
+.pane header {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.pane header .side { font-weight: 600; }
+.pane header .label { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+
+.pane .canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.pane .message {
+  position: absolute;
+  inset: 40% 10% auto 10%;
+  text-align: center;
+  color: var(--muted);
+  pointer-events: none;
+  white-space: pre-wrap;
+}
+.pane .message.error { color: var(--removed); }
+.pane .message:empty { display: none; }
+
+.ghost-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  display: none;
+  z-index: 10;
+}
+.ghost-cursor::before {
+  content: "";
+  position: absolute;
+  left: -9px;
+  top: -9px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.ghost-cursor::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: -1px;
+  width: 2px;
+  height: 2px;
+  background: var(--accent);
+}
+.ghost-cursor.visible { display: block; }
+
+/* The bpmn.io watermark (.bjs-powered-by) must stay unchanged and fully visible - see the bpmn-js license. */
+
+/* ---- change list ---- */
+
+#changes {
+  flex: 0 0 28%;
+  min-height: 80px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+}
+#changes[hidden] { display: none; }
+
+#change-list { list-style: none; margin: 0; padding: 0; }
+#change-list li {
+  display: grid;
+  grid-template-columns: 120px minmax(120px, 1fr) minmax(90px, 160px);
+  gap: 8px;
+  padding: 3px 8px;
+  cursor: pointer;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+#change-list li:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+#change-list li.empty { display: block; color: var(--muted); cursor: default; }
+#change-list .kind { font-weight: 600; }
+#change-list .kind.added { color: var(--added); }
+#change-list .kind.removed { color: var(--removed); }
+#change-list .kind.changed { color: var(--changed); }
+#change-list .kind.layout { color: var(--layout); }
+#change-list .type { color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#change-list .attrs { grid-column: 2 / 4; color: var(--muted); font-family: ui-monospace, Consolas, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; }
+
+/* ---- diagram markers ---- */
+
+.djs-shape.diff-layout .djs-visual > :nth-child(1) { stroke: var(--layout) !important; stroke-dasharray: 5 3; }
+.djs-connection.diff-layout .djs-visual > path { stroke: var(--layout) !important; stroke-dasharray: 5 3; }
+
+.djs-shape.diff-changed .djs-visual > :nth-child(1) { stroke: var(--changed) !important; fill: var(--changed-fill) !important; stroke-width: 2.5px !important; stroke-dasharray: none; }
+.djs-connection.diff-changed .djs-visual > path { stroke: var(--changed) !important; stroke-width: 2.5px !important; stroke-dasharray: none; }
+
+.djs-shape.diff-added .djs-visual > :nth-child(1) { stroke: var(--added) !important; fill: var(--added-fill) !important; stroke-width: 2.5px !important; stroke-dasharray: none; }
+.djs-connection.diff-added .djs-visual > path { stroke: var(--added) !important; stroke-width: 2.5px !important; stroke-dasharray: none; }
+
+.djs-shape.diff-removed .djs-visual > :nth-child(1) { stroke: var(--removed) !important; fill: var(--removed-fill) !important; stroke-width: 2.5px !important; stroke-dasharray: none; }
+.djs-connection.diff-removed .djs-visual > path { stroke: var(--removed) !important; stroke-width: 2.5px !important; stroke-dasharray: none; }
+
+.djs-element.sync-hover .djs-outline,
+.djs-element.diff-focus .djs-outline {
+  visibility: visible !important;
+  stroke: var(--accent) !important;
+  stroke-width: 2px !important;
+  stroke-dasharray: none !important;
+}
+.djs-element.diff-focus .djs-outline { stroke-width: 4px !important; }
+
+.diff-badge {
+  display: inline-block;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 8px;
+  color: #fff;
+  font: 600 11px/16px "Segoe UI", system-ui, sans-serif;
+  text-align: center;
+  cursor: help;
+  box-shadow: 0 0 0 1.5px #fff;
+}
+.diff-badge.added { background: var(--added); }
+.diff-badge.removed { background: var(--removed); }
+.diff-badge.changed { background: var(--changed); }
+.diff-badge.layout { background: var(--layout); }

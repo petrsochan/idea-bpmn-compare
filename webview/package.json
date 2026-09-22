@@ -1,0 +1,18 @@
+{
+  "name": "bpmn-compare-webview",
+  "private": true,
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "bpmn.io based diff view embedded in the BPMN Compare IntelliJ plugin",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "bpmn-js": "^18.29.1",
+    "bpmn-js-differ": "^3.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

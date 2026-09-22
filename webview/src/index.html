@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BPMN Compare</title>
+  <link rel="stylesheet" href="bundle.css">
+</head>
+<body>
+<div id="app">
+  <div id="summary">
+    <button type="button" class="chip added" data-kind="added" aria-pressed="true"><i></i>Added <b>0</b></button>
+    <button type="button" class="chip removed" data-kind="removed" aria-pressed="true"><i></i>Removed <b>0</b></button>
+    <button type="button" class="chip changed" data-kind="changed" aria-pressed="true"><i></i>Changed <b>0</b></button>
+    <button type="button" class="chip layout" data-kind="layout" aria-pressed="true"><i></i>Moved <b>0</b></button>
+    <span id="summary-note"></span>
+    <button id="toggle-changes" type="button">Changes list</button>
+  </div>
+
+  <div id="panes">
+    <section class="pane" id="pane-left">
+      <header><span class="side">Current</span><span class="label"></span></header>
+      <div class="canvas"></div>
+      <div class="message"></div>
+      <div class="ghost-cursor"></div>
+    </section>
+    <section class="pane" id="pane-right">
+      <header><span class="side">Revision</span><span class="label"></span></header>
+      <div class="canvas"></div>
+      <div class="message"></div>
+      <div class="ghost-cursor"></div>
+    </section>
+  </div>
+
+  <aside id="changes" hidden>
+    <ul id="change-list"></ul>
+  </aside>
+</div>
+<script src="bundle.js"></script>
+</body>
+</html>

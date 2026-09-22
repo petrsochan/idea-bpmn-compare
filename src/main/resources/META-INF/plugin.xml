@@ -1,0 +1,50 @@
+<idea-plugin>
+    <id>com.github.bpmncompare</id>
+    <name>BPMN Compare</name>
+    <vendor email="petr.sochan@gmail.com">Petr Sochan</vendor>
+
+    <description><![CDATA[
+    Visual comparison of BPMN 2.0 diagrams against any Git revision, powered by
+    <a href="https://bpmn.io">bpmn.io</a> (bpmn-js and bpmn-js-differ).
+    <ul>
+      <li>Current version of the diagram on the left, a branch, tag or commit of your choice on the right.</li>
+      <li>Added, removed, changed and moved elements are highlighted; a change list lets you jump to each change.</li>
+      <li>Optional synchronization of mouse cursor, hover and pan/zoom between both diagrams.</li>
+    </ul>
+    Open a <code>.bpmn</code> file and switch to the <b>BPMN Diff</b> tab, or use
+    <b>Compare BPMN with Branch or Commit…</b> from the context menu.
+    <p>
+    The plugin is open source under the MIT license.
+    Diagram rendering and diffing uses <a href="https://github.com/bpmn-io/bpmn-js">bpmn-js</a>
+    (© Camunda Services GmbH, <a href="https://github.com/bpmn-io/bpmn-js/blob/develop/LICENSE">bpmn.io license</a>)
+    and <a href="https://github.com/bpmn-io/bpmn-js-differ">bpmn-js-differ</a> (MIT). Copyright and license notices
+    of all bundled third-party packages are included in <code>THIRD-PARTY-NOTICES.txt</code> of the plugin distribution.
+    </p>
+    ]]></description>
+
+    <dependencies>
+        <plugin id="com.intellij.modules.platform"/>
+        <plugin id="Git4Idea"/>
+        <plugin id="com.intellij.modules.jcef"/>
+        <module name="intellij.libraries.jcef"/>
+        <module name="intellij.platform.ui.jcef"/>
+        <module name="intellij.platform.vcs.dvcs"/>
+        <module name="intellij.platform.vcs.dvcs.impl"/>
+    </dependencies>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <fileEditorProvider implementation="com.github.bpmncompare.BpmnCompareEditorProvider"/>
+    </extensions>
+
+    <actions>
+        <action id="BpmnCompare.CompareWithRevision"
+                class="com.github.bpmncompare.CompareWithRevisionAction"
+                text="Compare BPMN with Branch or Commit…"
+                description="Show the BPMN diagram side by side with a Git revision and highlight the differences"
+                icon="AllIcons.Actions.Diff">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorTabPopupMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>
