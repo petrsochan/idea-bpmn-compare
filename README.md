@@ -1,5 +1,7 @@
 # BPMN Compare – IntelliJ IDEA plugin
 
+[![Build](https://github.com/petrsochan/idea-bpmn-compare/actions/workflows/build.yml/badge.svg)](https://github.com/petrsochan/idea-bpmn-compare/actions/workflows/build.yml)
+
 Visual comparison of BPMN diagrams with any Git revision, powered by [bpmn.io](https://bpmn.io)
 (`bpmn-js` for rendering, `bpmn-js-differ` for computing the differences).
 
@@ -32,6 +34,9 @@ installed IDEA instead (no download), set its path in `~/.gradle/gradle.properti
 ```
 localIdePath=C:/Program Files/JetBrains/IntelliJ IDEA 2026.2
 ```
+
+Every push to `main` and every pull request is built by GitHub Actions (`.github/workflows/build.yml`);
+the plugin ZIP is attached to the workflow run as an artifact.
 
 Target: IntelliJ IDEA 2026.2+ (build 262) – in this version JCEF and DVCS are separate platform modules.
 
