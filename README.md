@@ -23,8 +23,12 @@ Vyžaduje JDK 21+ a Node.js (npm) – webová část v `webview/` se bundluje es
 ./gradlew buildPlugin   # build/distributions/idea-bpmn-compare-*.zip → Settings | Plugins | Install from Disk
 ```
 
-`localIdePath` v `gradle.properties` ukazuje na lokálně nainstalovanou IDEA (bez stahování);
-když cesta neexistuje, stáhne se IntelliJ IDEA `platformVersion`.
+Standardně se stáhne IntelliJ IDEA `platformVersion` z `gradle.properties`. Pro build proti lokálně
+nainstalované IDEA (bez stahování) nastav cestu v `~/.gradle/gradle.properties`:
+
+```
+localIdePath=C:/Program Files/JetBrains/IntelliJ IDEA 2026.2
+```
 
 Cíl: IntelliJ IDEA 2026.2+ (build 262) – v této verzi jsou JCEF a DVCS samostatné moduly platformy.
 
