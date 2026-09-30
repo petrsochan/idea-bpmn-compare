@@ -75,7 +75,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     private boolean repositoryResolved;
 
     private RevisionItem revision = RevisionItem.HEAD;
-    private RightSide right = RightSide.message("Loading " + RevisionItem.HEAD.shortLabel() + "…");
+    private DiagramSide right = DiagramSide.message("Loading " + RevisionItem.HEAD.shortLabel() + "…");
     private int revisionRequest;
 
     BpmnComparePanel(Project project, VirtualFile file) {
@@ -331,23 +331,23 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         pushStatus("right", "Loading " + item.shortLabel() + "…");
 
         new Task.Backgroundable(project, "Loading " + file.getName() + " at " + item.shortLabel(), false) {
-            private RightSide result;
+            private DiagramSide result;
 
             @Override
             public void run(@NotNull ProgressIndicator indicator) {
                 GitRepository repo = resolveRepository();
                 if (repo == null) {
-                    result = RightSide.error("The file is not under Git version control.");
+                    result = DiagramSide.error(item.label(), "The file is not under Git version control.");
                     return;
                 }
                 String hash = GitRevisions.shortHash(project, repo, item.revision());
                 String label = hash == null || hash.equals(item.revision()) ? item.label() : item.shortLabel() + " (" + hash + ")";
                 try {
-                    result = RightSide.xml(GitRevisions.content(project, repo, file, item.revision()), label);
+                    result = DiagramSide.xml(GitRevisions.content(project, repo, file, item.revision()), label);
                 } catch (GitRevisions.MissingInRevisionException e) {
-                    result = RightSide.missing(label, "The file does not exist in " + item.shortLabel() + ".\nEverything in the current version is new.");
+                    result = DiagramSide.missing(label, "The file does not exist in " + item.shortLabel() + ".\nEverything in the current version is new.");
                 } catch (VcsException e) {
-                    result = RightSide.error(label, e.getMessage());
+                    result = DiagramSide.error(label, e.getMessage());
                 }
             }
 
@@ -457,39 +457,5 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     public void dispose() {
         disposed = true;
         pageReady = false;
-    }
-
-    /** What the right-hand pane should display. */
-    private record RightSide(String xml, String label, String error, String message, boolean missing) {
-
-        static RightSide xml(String xml, String label) {
-            return new RightSide(xml, label, null, null, false);
-        }
-
-        static RightSide missing(String label, String message) {
-            return new RightSide(null, label, null, message, true);
-        }
-
-        static RightSide error(String message) {
-            return error(null, message);
-        }
-
-        static RightSide error(String label, String message) {
-            return new RightSide(null, label, message, null, false);
-        }
-
-        static RightSide message(String message) {
-            return new RightSide(null, null, null, message, false);
-        }
-
-        Map<String, Object> toJson() {
-            Map<String, Object> json = new LinkedHashMap<>();
-            json.put("xml", xml);
-            json.put("label", label);
-            json.put("error", error);
-            json.put("message", message);
-            json.put("missing", missing);
-            return json;
-        }
     }
 }
