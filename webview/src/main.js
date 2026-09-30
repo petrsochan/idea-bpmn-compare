@@ -2,6 +2,8 @@ import NavigatedViewer from 'bpmn-js/lib/NavigatedViewer';
 import { diff } from 'bpmn-js-differ';
 import { getBBox } from 'diagram-js/lib/util/Elements';
 
+import { describeAttrs, displayName, normalizeAttrs, typeName } from './format.js';
+
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-js.css';
 import './styles.css';
@@ -269,64 +271,6 @@ function toChangeList(changes) {
   list.sort((a, b) => KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind) || displayName(a).localeCompare(displayName(b)));
 
   return list;
-}
-
-/**
- * bpmn-js-differ reports property values from the perspective of its internal model walk, which ends up
- * with oldValue taken from the second (new) definitions - swap them so old = revision, new = current.
- */
-function normalizeAttrs(attrs) {
-  const result = {};
-
-  for (const [ name, { oldValue, newValue } ] of Object.entries(attrs || {})) {
-    result[name] = { oldValue: newValue, newValue: oldValue };
-  }
-
-  return result;
-}
-
-function displayName(change) {
-  const model = change.model || {};
-
-  return (model.name || '').trim() || change.id;
-}
-
-function typeName(change) {
-  const type = change.model && change.model.$type || '';
-
-  return type.replace(/^bpmn:/, '');
-}
-
-function formatValue(value) {
-  if (value === undefined || value === null) {
-    return '∅';
-  }
-
-  if (Array.isArray(value)) {
-    return '[' + value.map(formatValue).join(', ') + ']';
-  }
-
-  if (typeof value === 'object') {
-    if (value.$type) {
-      return value.$type.replace(/^bpmn:/, '') + (value.id ? '#' + value.id : '');
-    }
-
-    return JSON.stringify(value);
-  }
-
-  const text = String(value);
-
-  return text.length > 120 ? JSON.stringify(text.slice(0, 117) + '...') : JSON.stringify(text);
-}
-
-function describeAttrs(attrs) {
-  if (!attrs) {
-    return '';
-  }
-
-  return Object.entries(attrs)
-    .map(([ name, { oldValue, newValue } ]) => name + ': ' + formatValue(oldValue) + ' → ' + formatValue(newValue))
-    .join('\n');
 }
 
 /** Sides a change kind is drawn on. */

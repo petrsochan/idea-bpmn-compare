@@ -6,7 +6,8 @@
   "description": "bpmn.io based diff view embedded in the BPMN Compare IntelliJ plugin",
   "type": "module",
   "scripts": {
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
     "bpmn-js": "^18.29.1",

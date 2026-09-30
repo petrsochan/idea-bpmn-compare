@@ -105,6 +105,22 @@ val buildWebview = tasks.register<Exec>("buildWebview") {
     outputs.dir(webviewOut)
 }
 
+val testWebview = tasks.register<Exec>("testWebview") {
+    group = "verification"
+    description = "Runs the unit tests of the web view."
+    dependsOn(npmInstall)
+    workingDir = webviewDir.asFile
+    commandLine(npm("test"))
+    inputs.dir(webviewDir.dir("src"))
+    inputs.dir(webviewDir.dir("test"))
+    // node --test reports nothing on an up-to-date run, which would hide a genuine regression
+    outputs.upToDateWhen { false }
+}
+
+tasks.check {
+    dependsOn(testWebview)
+}
+
 sourceSets {
     main {
         resources.srcDir(files(webviewOut).builtBy(buildWebview))
