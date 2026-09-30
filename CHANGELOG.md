@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Tooltips in the diff view are shown at last. None of them had ever been visible — not on the toolbar buttons or filter chips, and not on the change badges, even though the badge tooltip with the changed attributes is a documented feature. Inside JCEF a native tooltip is only shown if the host draws it, so the view now draws its own.
+
 ## [1.1.0]
 
 ### Added
