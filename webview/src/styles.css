@@ -81,8 +81,7 @@ button.chip:hover { border-color: var(--accent); }
 
 #summary-note { color: var(--muted); margin-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-#toggle-changes {
-  margin-left: auto;
+.bar-button {
   font: inherit;
   color: var(--fg);
   background: transparent;
@@ -91,7 +90,18 @@ button.chip:hover { border-color: var(--accent); }
   padding: 1px 8px;
   cursor: pointer;
 }
-#toggle-changes:hover, #toggle-changes.active { border-color: var(--accent); }
+.bar-button:hover:not(:disabled), .bar-button.active { border-color: var(--accent); }
+.bar-button:disabled { opacity: .45; cursor: default; }
+
+#zoom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+#zoom .bar-button { padding: 1px 6px; }
+#zoom-out, #zoom-in { width: 22px; padding: 1px 0; font-size: 13px; line-height: 1.2; }
+#zoom-reset { min-width: 44px; font-variant-numeric: tabular-nums; }
 
 /* ---- panes ---- */
 

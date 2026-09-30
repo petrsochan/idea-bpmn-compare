@@ -13,7 +13,13 @@
     <button type="button" class="chip changed" data-kind="changed" aria-pressed="true"><i></i>Changed <b>0</b></button>
     <button type="button" class="chip layout" data-kind="layout" aria-pressed="true"><i></i>Moved <b>0</b></button>
     <span id="summary-note"></span>
-    <button id="toggle-changes" type="button">Changes list</button>
+    <div id="zoom">
+      <button id="zoom-out" class="bar-button" type="button" title="Zoom out">−</button>
+      <button id="zoom-reset" class="bar-button" type="button" title="Reset zoom to 100%">100%</button>
+      <button id="zoom-in" class="bar-button" type="button" title="Zoom in">+</button>
+      <button id="zoom-fit" class="bar-button" type="button" title="Fit the diagram into the window">Fit</button>
+    </div>
+    <button id="toggle-changes" class="bar-button" type="button">Changes list</button>
   </div>
 
   <div id="panes">

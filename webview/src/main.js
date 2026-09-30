@@ -53,6 +53,8 @@ function createPane(side) {
 
   eventBus.on('canvas.viewbox.changing', () => scheduleViewSync(side));
 
+  eventBus.on('canvas.viewbox.changed', () => updateZoomControls());
+
   eventBus.on('element.hover', (event) => {
     if (syncEnabled) {
       setSyncHover(other(side), event.element.id, true);
@@ -173,6 +175,7 @@ async function render(payload) {
     renderChangeList(currentChanges);
 
     restoreOrFit(previousView);
+    updateZoomControls();
   } finally {
     applyingSync = false;
   }
@@ -574,6 +577,83 @@ function centerOn(pane, element) {
     height: viewbox.height
   });
 }
+
+// ---------------------------------------------------------------------------
+// zoom
+// ---------------------------------------------------------------------------
+
+const ZOOM_STEP = 1.2;
+const ZOOM_MIN = 0.2;
+const ZOOM_MAX = 4;
+
+function loadedPanes() {
+  return [ 'left', 'right' ].map((side) => panes[side]).filter((pane) => pane.loaded);
+}
+
+/**
+ * Runs a zoom action on the diagrams. With sync on, zooming one side is enough - the other follows,
+ * so both keep showing the same region; with sync off each side zooms around its own centre.
+ */
+function applyZoom(action) {
+  const loaded = loadedPanes();
+
+  if (!loaded.length) {
+    return;
+  }
+
+  const targets = syncEnabled ? loaded.slice(0, 1) : loaded;
+
+  for (const pane of targets) {
+    action(canvasOf(pane));
+  }
+
+  if (syncEnabled) {
+    copyViewbox(targets[0], panes[other(targets[0].side)]);
+  }
+
+  updateZoomControls();
+}
+
+function zoomBy(factor) {
+  applyZoom((canvas) => {
+    const level = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, canvas.zoom() * factor));
+
+    // no centre argument -> diagram-js zooms around the middle of the viewport
+    canvas.zoom(level);
+  });
+}
+
+function zoomTo(level) {
+  applyZoom((canvas) => canvas.zoom(level));
+}
+
+function zoomFit() {
+  applyZoom((canvas) => canvas.zoom('fit-viewport', 'auto'));
+}
+
+/** Zoom level shown in the toolbar - the left pane leads, the right one stands in when it is empty. */
+function currentZoom() {
+  const pane = loadedPanes()[0];
+
+  return pane ? canvasOf(pane).zoom() : null;
+}
+
+function updateZoomControls() {
+  const zoom = currentZoom();
+
+  document.getElementById('zoom-reset').textContent = zoom ? Math.round(zoom * 100) + '%' : '—';
+
+  for (const button of document.querySelectorAll('#zoom .bar-button')) {
+    button.disabled = !zoom;
+  }
+}
+
+document.getElementById('zoom-out').addEventListener('click', () => zoomBy(1 / ZOOM_STEP));
+document.getElementById('zoom-in').addEventListener('click', () => zoomBy(ZOOM_STEP));
+document.getElementById('zoom-reset').addEventListener('click', () => zoomTo(1));
+document.getElementById('zoom-fit').addEventListener('click', () => zoomFit());
+
+updateZoomControls();
 
 // ---------------------------------------------------------------------------
 // synchronization
