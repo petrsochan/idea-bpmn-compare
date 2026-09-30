@@ -37,9 +37,11 @@ dependencies {
         bundledModule("intellij.platform.vcs.dvcs.impl")
         bundledModule("intellij.platform.ui.jcef")
         bundledModule("intellij.libraries.jcef")
-        // FrameDiffTool and the diff request model, separate platform modules in 2026.2
+        // FrameDiffTool and the diff request model live in their own platform module since 2026.2.
+        // Compile-time only: it is an internal module, so plugin.xml must NOT declare a dependency
+        // on it (the Plugin Verifier rejects that as a possible module loading failure) - the API is
+        // reachable at runtime through com.intellij.modules.platform.
         bundledModule("intellij.platform.diff")
-        bundledModule("intellij.platform.diff.impl")
 
         // IntelliJ Plugin Verifier: checks that every platform API the plugin calls exists in the
         // target IDEs - unlike verifyPluginStructure, which only validates the descriptor.

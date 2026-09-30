@@ -28,7 +28,6 @@
         <plugin id="com.intellij.modules.jcef"/>
         <module name="intellij.libraries.jcef"/>
         <module name="intellij.platform.ui.jcef"/>
-        <module name="intellij.platform.diff"/>
         <module name="intellij.platform.vcs.dvcs"/>
         <module name="intellij.platform.vcs.dvcs.impl"/>
     </dependencies>

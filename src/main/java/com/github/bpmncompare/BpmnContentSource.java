@@ -56,9 +56,9 @@ interface BpmnContentSource {
                     : DiagramSide.xml(xml, label());
         }
 
-        /** Read action because this also runs from the background task that reloads a side. */
+        /** Read action because this runs from the background task that reloads a side. */
         private String text() {
-            return ReadAction.compute(() -> {
+            return ReadAction.computeBlocking(() -> {
                 Document document = FileDocumentManager.getInstance().getDocument(file);
                 if (document != null) {
                     return document.getText();

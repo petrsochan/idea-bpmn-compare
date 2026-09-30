@@ -5,7 +5,6 @@ import com.intellij.diff.FrameDiffTool;
 import com.intellij.diff.contents.DiffContent;
 import com.intellij.diff.contents.DocumentContent;
 import com.intellij.diff.requests.ContentDiffRequest;
-import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.util.Disposer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -32,11 +31,14 @@ final class BpmnDiffViewer implements FrameDiffTool.DiffViewer {
                 new BpmnContentSource.Fixed(textOf(contents.get(BEFORE)), title(titles, BEFORE, "Before")));
     }
 
-    /** {@code null} for content without a document - an {@code EmptyContent} of a file that did not exist. */
+    /**
+     * {@code null} for content without a document - an {@code EmptyContent} of a file that did not exist.
+     *
+     * <p>No read action: the diff framework constructs the viewer on the EDT, which already holds
+     * write-intent read access.
+     */
     private static @Nullable String textOf(DiffContent content) {
-        return content instanceof DocumentContent documentContent
-                ? ReadAction.compute(() -> documentContent.getDocument().getText())
-                : null;
+        return content instanceof DocumentContent documentContent ? documentContent.getDocument().getText() : null;
     }
 
     private static String title(List<String> titles, int index, String fallback) {
