@@ -7,6 +7,9 @@ import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.editor.EditorFactory;
+import com.intellij.openapi.editor.event.CaretEvent;
+import com.intellij.openapi.editor.event.CaretListener;
 import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
@@ -66,6 +69,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     private static final Logger LOG = Logger.getInstance(BpmnComparePanel.class);
     private static final int DOCUMENT_UPDATE_DELAY_MS = 600;
     private static final int GIT_UPDATE_DELAY_MS = 400;
+    private static final int CARET_UPDATE_DELAY_MS = 250;
 
     private final Project project;
     private final VirtualFile file;
@@ -75,6 +79,10 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     private final Alarm documentAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
     /** Separate from {@link #documentAlarm} so an edit and a repository change cannot cancel each other. */
     private final Alarm gitAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
+    /** Dragging the caret must not flood JCEF with one call per position. */
+    private final Alarm caretAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
+    private final JBCheckBox followCaretBox =
+            new JBCheckBox("Follow caret", BpmnCompareSettings.isFollowCaretEnabled());
 
     private JBCefBrowser browser;
     private JBCefJSQuery hostQuery;
@@ -161,6 +169,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
                     documentAlarm.addRequest(() -> reloadSide(Side.LEFT, leftSource, true), DOCUMENT_UPDATE_DELAY_MS);
                 }
             }, this);
+            followTheCaret(document);
         }
 
         ApplicationManager.getApplication().getMessageBus().connect(this)
@@ -233,6 +242,34 @@ final class BpmnComparePanel extends JPanel implements Disposable {
                     () -> openXml(String.valueOf(message.get("id"))), o -> disposed);
         } else {
             LOG.warn("Unknown web view command: " + command);
+        }
+    }
+
+    /**
+     * With <i>Follow caret</i> on, moving the caret in the XML selects the element it is inside, which
+     * pairs with the double-click navigation in the other direction.
+     */
+    private void followTheCaret(Document document) {
+        EditorFactory.getInstance().getEventMulticaster().addCaretListener(new CaretListener() {
+            @Override
+            public void caretPositionChanged(@NotNull CaretEvent event) {
+                if (event.getEditor().getDocument() != document || !followCaretBox.isSelected()) {
+                    return;
+                }
+                int offset = event.getEditor().getCaretModel().getOffset();
+                caretAlarm.cancelAllRequests();
+                caretAlarm.addRequest(() -> selectElementAt(document, offset), CARET_UPDATE_DELAY_MS);
+            }
+        }, this);
+    }
+
+    private void selectElementAt(Document document, int offset) {
+        if (!pageReady) {
+            return;
+        }
+        String id = BpmnXmlLocator.elementIdAt(document.getText(), offset);
+        if (id != null) {
+            call("selectElement", id);
         }
     }
 
@@ -319,6 +356,13 @@ final class BpmnComparePanel extends JPanel implements Disposable {
             pushSync();
         });
         controls.add(syncBox);
+
+        // pointless without a document to put a caret in
+        if (leftSource instanceof BpmnContentSource.Working) {
+            followCaretBox.setToolTipText("Select the element the caret is in while you edit the XML");
+            followCaretBox.addActionListener(e -> BpmnCompareSettings.setFollowCaretEnabled(followCaretBox.isSelected()));
+            controls.add(followCaretBox);
+        }
 
         bar.add(controls, BorderLayout.EAST);
         return bar;

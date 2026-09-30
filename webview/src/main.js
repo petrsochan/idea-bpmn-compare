@@ -486,6 +486,13 @@ function goToChange(step) {
   focusElement(changes[next].id);
 }
 
+/** Selects and centres an element, driven by the caret position in the XML editor. */
+function selectElement(id) {
+  if (id && (panes.left.loaded || panes.right.loaded)) {
+    focusElement(id);
+  }
+}
+
 function updateChangeNav() {
   const disabled = !navigableChanges().length;
 
@@ -860,5 +867,6 @@ window.bpmnCompare = {
   setStatus,
   setVisibleKinds,
   focusElement,
-  goToChange
+  goToChange,
+  selectElement
 };
