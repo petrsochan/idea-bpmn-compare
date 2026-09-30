@@ -20,6 +20,10 @@ Visual comparison of BPMN diagrams with any Git revision, powered by [bpmn.io](h
 Open a `.bpmn` file and switch to the **BPMN Diff** tab at the bottom of the editor,
 or right-click the file → **Compare BPMN with Branch or Commit…**.
 
+Any IDE diff of a `.bpmn` file can be switched to the BPMN view as well – open a diff from the commit dialog,
+the Git log, *Compare with Branch…* or *Compare Two Files*, and pick **BPMN diagram** in the diff tool selector.
+That is also the way to compare two revisions with each other; the editor tab always has the working copy on the left.
+
 ## Build
 Requires JDK 21+ and Node.js (npm) – the web part in `webview/` is bundled with esbuild automatically during the build.
 

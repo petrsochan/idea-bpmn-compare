@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- The BPMN view is available in every IDE diff window - the commit dialog, the Git log, *Compare with Branch*, *Compare Two Files*. Pick **BPMN diagram** in the diff tool selector; the text diff stays the default. This is also the only way to compare two revisions of a diagram with each other.
+
 ## [1.0.1]
 
 ### Added

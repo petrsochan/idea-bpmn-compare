@@ -141,7 +141,8 @@ final class BpmnComparePanel extends JPanel implements Disposable {
             return;
         }
 
-        Document document = documentOfFile();
+        // only a live working copy changes under us; the fixed content of a diff window does not
+        Document document = leftSource instanceof BpmnContentSource.Working ? documentOfFile() : null;
         if (document != null) {
             document.addDocumentListener(new DocumentListener() {
                 @Override

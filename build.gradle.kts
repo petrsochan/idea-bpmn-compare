@@ -37,6 +37,9 @@ dependencies {
         bundledModule("intellij.platform.vcs.dvcs.impl")
         bundledModule("intellij.platform.ui.jcef")
         bundledModule("intellij.libraries.jcef")
+        // FrameDiffTool and the diff request model, separate platform modules in 2026.2
+        bundledModule("intellij.platform.diff")
+        bundledModule("intellij.platform.diff.impl")
 
         // IntelliJ Plugin Verifier: checks that every platform API the plugin calls exists in the
         // target IDEs - unlike verifyPluginStructure, which only validates the descriptor.
