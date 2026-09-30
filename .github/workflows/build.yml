@@ -39,8 +39,17 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Build, test and verify plugin structure
-        run: ./gradlew buildPlugin test verifyPluginStructure
+      # verifyPlugin downloads the target IDEs (~2 GB) and takes several minutes; the Gradle cache
+      # set up above keeps that cost to the first run on a given cache key.
+      - name: Build, test and verify the plugin
+        run: ./gradlew buildPlugin check verifyPluginStructure verifyPlugin
+
+      - name: Upload verifier report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: plugin-verifier-report
+          path: build/reports/pluginVerifier
 
       - name: Upload plugin ZIP
         uses: actions/upload-artifact@v7

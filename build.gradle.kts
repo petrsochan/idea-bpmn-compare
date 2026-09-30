@@ -37,6 +37,10 @@ dependencies {
         bundledModule("intellij.platform.vcs.dvcs.impl")
         bundledModule("intellij.platform.ui.jcef")
         bundledModule("intellij.libraries.jcef")
+
+        // IntelliJ Plugin Verifier: checks that every platform API the plugin calls exists in the
+        // target IDEs - unlike verifyPluginStructure, which only validates the descriptor.
+        pluginVerifier()
     }
 
     testImplementation(platform("org.junit:junit-bom:6.0.0"))
@@ -62,6 +66,12 @@ intellijPlatform {
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")
             untilBuild = provider { null }
+        }
+    }
+
+    pluginVerification {
+        ides {
+            recommended()
         }
     }
 }
