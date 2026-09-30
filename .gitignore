@@ -6,10 +6,13 @@ build/
 .kotlin
 
 ### IntelliJ IDEA ###
+# only the .idea files worth sharing are tracked (gradle.xml, misc.xml); these are regenerated locally
 .idea/modules.xml
 .idea/jarRepositories.xml
 .idea/compiler.xml
 .idea/libraries/
+.idea/AndroidProjectSystem.xml
+.idea/vcs.xml
 *.iws
 *.iml
 *.ipr
