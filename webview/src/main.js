@@ -89,18 +89,96 @@ function other(side) {
   return side === 'left' ? 'right' : 'left';
 }
 
-/**
- * Greys a top-bar button out and gives it a tooltip, without the `disabled` attribute.
+// ---------------------------------------------------------------------------
+// tooltips
+// ---------------------------------------------------------------------------
+
+/*
+ * Tooltips are drawn by this page, not by the browser.
  *
- * Chromium suppresses pointer events on a disabled button, so its `title` never appears - exactly
- * when the user most wants to know why the button does nothing. `aria-disabled` keeps it hoverable
- * and still announces the state; the click handlers are no-ops in that state anyway.
+ * The view runs inside JCEF, where a native `title` tooltip never appears: CEF hands the tooltip to
+ * the client through CefDisplayHandler#onTooltip, and JBCefClient only forwards that to display
+ * handlers the plugin registers - nothing draws it. So every `title` in the top bar and on the
+ * change badges was invisible. Elements carry `data-tip` instead and this shows it.
+ *
+ * `aria-disabled` rather than `disabled` for the same family of reasons: a disabled button receives
+ * no pointer events at all, so it could not be hovered to explain why it does nothing.
  */
+
+const TIP_DELAY_MS = 400;
+const TIP_MARGIN = 6;
+
+let tipTimer = null;
+
+function tipElement() {
+  return document.getElementById('tip');
+}
+
+function showTip(target) {
+  const text = target.getAttribute('data-tip');
+
+  if (!text) {
+    return;
+  }
+
+  const tip = tipElement();
+
+  tip.textContent = text;
+  tip.hidden = false;
+
+  // measure only after the text is in, then keep the tip inside the window
+  const anchor = target.getBoundingClientRect();
+  const box = tip.getBoundingClientRect();
+  const left = Math.max(TIP_MARGIN,
+    Math.min(anchor.left + anchor.width / 2 - box.width / 2, window.innerWidth - box.width - TIP_MARGIN));
+  const below = anchor.bottom + TIP_MARGIN;
+  const top = below + box.height > window.innerHeight - TIP_MARGIN ? anchor.top - box.height - TIP_MARGIN : below;
+
+  tip.style.left = left + 'px';
+  tip.style.top = Math.max(TIP_MARGIN, top) + 'px';
+}
+
+function hideTip() {
+  clearTimeout(tipTimer);
+  tipElement().hidden = true;
+}
+
+// delegated, so badges and change list rows created later are covered too
+document.addEventListener('mouseover', (event) => {
+  const target = event.target.closest && event.target.closest('[data-tip]');
+
+  if (!target) {
+    return;
+  }
+
+  clearTimeout(tipTimer);
+  tipTimer = setTimeout(() => showTip(target), TIP_DELAY_MS);
+});
+
+document.addEventListener('mouseout', (event) => {
+  if (event.target.closest && event.target.closest('[data-tip]')) {
+    hideTip();
+  }
+});
+
+document.addEventListener('mousedown', hideTip);
+window.addEventListener('blur', hideTip);
+
+/** Sets an element's tooltip; an empty text removes it. */
+function setTip(element, text) {
+  if (text) {
+    element.setAttribute('data-tip', text);
+  } else {
+    element.removeAttribute('data-tip');
+  }
+}
+
+/** Greys a top-bar button out and gives it a tooltip saying why, without the `disabled` attribute. */
 function setBarButtonState(id, inactive, activeTitle, inactiveTitle) {
   const button = document.getElementById(id);
 
   button.setAttribute('aria-disabled', String(inactive));
-  button.title = inactive ? inactiveTitle : activeTitle;
+  setTip(button, inactive ? inactiveTitle : activeTitle);
 }
 
 /** Sends a message to the IDE. The bridge is absent until the host injects it, and in a plain browser. */
@@ -121,7 +199,7 @@ function showMessage(pane, text, isError) {
 
 async function importInto(pane, spec) {
   pane.labelEl.textContent = spec.label || '';
-  pane.labelEl.title = spec.label || '';
+  setTip(pane.labelEl, spec.label || '');
 
   if (!spec.xml) {
     pane.viewer.clear();
@@ -350,7 +428,8 @@ function addBadge(pane, change, kind) {
   badge.textContent = KIND_BADGE[kind];
 
   const details = describeAttrs(change.attrs);
-  badge.title = [ ...change.kinds ].map((k) => KIND_LABEL[k]).join(', ') + ': ' + displayName(change) + (details ? '\n\n' + details : '');
+  setTip(badge, [ ...change.kinds ].map((k) => KIND_LABEL[k]).join(', ') + ': ' + displayName(change)
+    + (details ? '\n\n' + details : ''));
 
   try {
     pane.viewer.get('overlays').add(change.id, 'diff', {
@@ -446,7 +525,7 @@ function renderChangeList(changeList) {
 
     const name = document.createElement('span');
     name.textContent = displayName(change);
-    name.title = change.id;
+    setTip(name, change.id);
 
     const type = document.createElement('span');
     type.className = 'type';
@@ -828,7 +907,7 @@ function updateFilterChips() {
     const on = visibleKinds.has(chip.dataset.kind);
     chip.classList.toggle('off', !on);
     chip.setAttribute('aria-pressed', String(on));
-    chip.title = (on ? 'Hide ' : 'Show ') + KIND_LABEL[chip.dataset.kind].toLowerCase() + ' elements';
+    setTip(chip, (on ? 'Hide ' : 'Show ') + KIND_LABEL[chip.dataset.kind].toLowerCase() + ' elements');
   }
 }
 
@@ -874,9 +953,9 @@ function setChangeListVisible(visible) {
 
 /** The tooltip follows the state, the way the filter chips do. */
 function updateChangeListTooltip() {
-  document.getElementById('toggle-changes').title = isChangeListHidden()
+  setTip(document.getElementById('toggle-changes'), isChangeListHidden()
     ? 'Show the list of all changes; click an entry to centre that element'
-    : 'Hide the list of changes (Escape)';
+    : 'Hide the list of changes (Escape)');
 }
 
 updateChangeListTooltip();

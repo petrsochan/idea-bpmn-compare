@@ -28,7 +28,7 @@
     <!-- title is set from main.js, so the wording lives in one place and follows the open/closed state -->
     <button id="toggle-changes" class="bar-button" type="button">Changes list</button>
     <div id="export-wrap">
-      <button id="export" class="bar-button" type="button" title="Export the diagram or the change list">Export</button>
+      <button id="export" class="bar-button" type="button" data-tip="Export the diagram or the change list">Export</button>
       <ul id="export-menu" hidden>
         <li data-command="copyMarkdown">Copy change list as Markdown</li>
         <li data-command="saveSvg">Save left diagram as SVG…</li>
@@ -55,6 +55,9 @@
   <aside id="changes" hidden>
     <ul id="change-list"></ul>
   </aside>
+
+  <!-- tooltips are drawn here, not by the browser: see the tooltips section of main.js -->
+  <div id="tip" role="tooltip" hidden></div>
 </div>
 <script src="bundle.js"></script>
 </body>
