@@ -48,5 +48,15 @@
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <add-to-group group-id="EditorTabPopupMenu" anchor="last"/>
         </action>
+        <action id="BpmnCompare.NextChange" class="com.github.bpmncompare.GoToChangeAction$Next"
+                text="Next BPMN Change"
+                description="Center the next highlighted change in the BPMN compare view">
+            <keyboard-shortcut keymap="$default" first-keystroke="F7"/>
+        </action>
+        <action id="BpmnCompare.PreviousChange" class="com.github.bpmncompare.GoToChangeAction$Previous"
+                text="Previous BPMN Change"
+                description="Center the previous highlighted change in the BPMN compare view">
+            <keyboard-shortcut keymap="$default" first-keystroke="shift F7"/>
+        </action>
     </actions>
 </idea-plugin>

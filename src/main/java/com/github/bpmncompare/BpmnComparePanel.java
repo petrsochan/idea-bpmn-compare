@@ -445,6 +445,13 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         call("setDiagrams", payload);
     }
 
+    /** Steps the web view to the next (+1) or previous (-1) visible change. */
+    void goToChange(int step) {
+        if (pageReady) {
+            call("goToChange", step);
+        }
+    }
+
     private void pushSync() {
         if (pageReady) {
             call("setSync", syncBox.isSelected());

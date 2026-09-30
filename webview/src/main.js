@@ -175,12 +175,16 @@ async function render(payload) {
       panes.left.loaded ? collectFlowElements(panes.left) : {},
       panes.right.loaded ? collectFlowElements(panes.right) : {});
 
+    // the change we were stepping on may not exist any more
+    selectedChangeId = currentChanges.some((change) => change.id === selectedChangeId) ? selectedChangeId : null;
+
     decorate(currentChanges);
     renderSummary(currentChanges, newDefs, oldDefs);
     renderChangeList(currentChanges);
 
     restoreOrFit(previousView);
     updateZoomControls();
+    updateChangeNav();
   } finally {
     applyingSync = false;
   }
@@ -424,8 +428,18 @@ function renderChangeList(changeList) {
       li.append(document.createElement('span'), attrs);
     }
 
+    li.dataset.changeId = change.id;
     li.addEventListener('click', () => focusElement(change.id));
     list.appendChild(li);
+  }
+
+  markSelectedRow(selectedChangeId);
+}
+
+/** Shows in the change list which change stepping is on, so F7 is not a blind jump. */
+function markSelectedRow(id) {
+  for (const li of document.querySelectorAll('#change-list li[data-change-id]')) {
+    li.classList.toggle('selected', li.dataset.changeId === id);
   }
 }
 
@@ -433,7 +447,41 @@ function renderChangeList(changeList) {
 // navigation
 // ---------------------------------------------------------------------------
 
+/** Where stepping through changes currently is; also the highlighted row of the change list. */
+let selectedChangeId = null;
+
+/** Changes the user can actually see, in change-list order, so navigation and the chips agree. */
+function navigableChanges() {
+  return currentChanges.filter(visibleKind);
+}
+
+/** Steps to the next (+1) or previous (-1) visible change, wrapping around. */
+function goToChange(step) {
+  const changes = navigableChanges();
+
+  if (!changes.length) {
+    return;
+  }
+
+  const current = changes.findIndex((change) => change.id === selectedChangeId);
+  const next = current < 0
+    ? (step > 0 ? 0 : changes.length - 1)
+    : (current + step + changes.length) % changes.length;
+
+  focusElement(changes[next].id);
+}
+
+function updateChangeNav() {
+  const disabled = !navigableChanges().length;
+
+  document.getElementById('change-prev').disabled = disabled;
+  document.getElementById('change-next').disabled = disabled;
+}
+
 function focusElement(id) {
+  selectedChangeId = id;
+  markSelectedRow(id);
+
   const targets = [ 'left', 'right' ]
     .map((side) => panes[side])
     .filter((pane) => pane.loaded && pane.viewer.get('elementRegistry').get(id));
@@ -741,6 +789,7 @@ function setVisibleKinds(kinds) {
   updateFilterChips();
   decorate(currentChanges);
   renderChangeList(currentChanges);
+  updateChangeNav();
 }
 
 for (const chip of document.querySelectorAll('#summary .chip')) {
@@ -760,11 +809,33 @@ for (const chip of document.querySelectorAll('#summary .chip')) {
 
 updateFilterChips();
 
-document.getElementById('toggle-changes').addEventListener('click', (event) => {
-  const aside = document.getElementById('changes');
-  aside.hidden = !aside.hidden;
-  event.currentTarget.classList.toggle('active', !aside.hidden);
+document.getElementById('toggle-changes').addEventListener('click', () => setChangeListVisible(isChangeListHidden()));
+
+function isChangeListHidden() {
+  return document.getElementById('changes').hidden;
+}
+
+function setChangeListVisible(visible) {
+  document.getElementById('changes').hidden = !visible;
+  document.getElementById('toggle-changes').classList.toggle('active', visible);
   resizeAll();
+}
+
+document.getElementById('change-prev').addEventListener('click', () => goToChange(-1));
+document.getElementById('change-next').addEventListener('click', () => goToChange(1));
+
+document.addEventListener('keydown', (event) => {
+  if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
+    return;
+  }
+
+  if (event.key === 'F7') {
+    event.preventDefault();
+    goToChange(event.shiftKey ? -1 : 1);
+  } else if (event.key === 'Escape' && !isChangeListHidden()) {
+    event.preventDefault();
+    setChangeListVisible(false);
+  }
 });
 
 window.bpmnCompare = {
@@ -773,5 +844,6 @@ window.bpmnCompare = {
   setTheme,
   setStatus,
   setVisibleKinds,
-  focusElement
+  focusElement,
+  goToChange
 };

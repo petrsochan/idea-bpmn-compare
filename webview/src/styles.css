@@ -93,11 +93,19 @@ button.chip:hover { border-color: var(--accent); }
 .bar-button:hover:not(:disabled), .bar-button.active { border-color: var(--accent); }
 .bar-button:disabled { opacity: .45; cursor: default; }
 
-#zoom {
+/* the change navigation is what pushes the trailing controls to the right edge */
+#change-nav {
   display: flex;
   align-items: center;
   gap: 4px;
   margin-left: auto;
+}
+#change-nav .bar-button { width: 22px; padding: 1px 0; font-size: 14px; line-height: 1.1; }
+
+#zoom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 #zoom .bar-button { padding: 1px 6px; }
 #zoom-out, #zoom-in { width: 22px; padding: 1px 0; font-size: 13px; line-height: 1.2; }
@@ -205,6 +213,11 @@ button.chip:hover { border-color: var(--accent); }
   border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
 }
 #change-list li:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+/* where stepping with F7 currently is */
+#change-list li.selected {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
 #change-list li.empty { display: block; color: var(--muted); cursor: default; }
 #change-list .kind { font-weight: 600; }
 #change-list .kind.added { color: var(--added); }

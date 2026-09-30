@@ -26,6 +26,10 @@ final class BpmnCompareEditor extends UserDataHolderBase implements FileEditor {
         Disposer.register(this, panel);
     }
 
+    BpmnComparePanel panel() {
+        return panel;
+    }
+
     @Override
     public @NotNull JComponent getComponent() {
         return panel;
