@@ -2,7 +2,8 @@ import NavigatedViewer from 'bpmn-js/lib/NavigatedViewer';
 import { diff } from 'bpmn-js-differ';
 import { getBBox } from 'diagram-js/lib/util/Elements';
 
-import { describeAttrs, displayName, normalizeAttrs, typeName } from './format.js';
+import { KINDS, toChangeList } from './changes.js';
+import { describeAttrs, displayName, typeName } from './format.js';
 
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-js.css';
@@ -15,7 +16,6 @@ import './styles.css';
  * The host (IntelliJ plugin) drives this page through window.bpmnCompare.
  */
 
-const KINDS = [ 'added', 'removed', 'changed', 'layout' ];
 const KIND_LABEL = { added: 'Added', removed: 'Removed', changed: 'Changed', layout: 'Moved' };
 const KIND_BADGE = { added: '+', removed: '−', changed: '✎', layout: '⇄' };
 
@@ -219,58 +219,6 @@ function restoreOrFit(previousView) {
   if (syncEnabled && panes.left.loaded && panes.right.loaded && !(previousView && previousView.left)) {
     copyViewbox(panes.left, panes.right);
   }
-}
-
-/**
- * Merges the differ output into one entry per element id.
- */
-function toChangeList(changes) {
-  if (!changes) {
-    return [];
-  }
-
-  const byId = new Map();
-
-  function entry(id, model) {
-    let e = byId.get(id);
-
-    if (!e) {
-      e = { id, kinds: new Set(), model, attrs: null };
-      byId.set(id, e);
-    }
-
-    e.model = e.model || model;
-
-    return e;
-  }
-
-  for (const [ id, model ] of Object.entries(changes._added || {})) {
-    entry(id, model).kinds.add('added');
-  }
-
-  for (const [ id, model ] of Object.entries(changes._removed || {})) {
-    entry(id, model).kinds.add('removed');
-  }
-
-  for (const [ id, change ] of Object.entries(changes._changed || {})) {
-    const e = entry(id, change.model);
-    e.kinds.add('changed');
-    e.attrs = normalizeAttrs(change.attrs);
-  }
-
-  for (const [ id, model ] of Object.entries(changes._layoutChanged || {})) {
-    entry(id, model).kinds.add('layout');
-  }
-
-  const list = [ ...byId.values() ];
-
-  for (const e of list) {
-    e.kind = KINDS.find((k) => e.kinds.has(k));
-  }
-
-  list.sort((a, b) => KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind) || displayName(a).localeCompare(displayName(b)));
-
-  return list;
 }
 
 /** Sides a change kind is drawn on. */
