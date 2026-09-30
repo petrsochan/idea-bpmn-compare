@@ -20,7 +20,9 @@ final class BpmnCompareEditor extends UserDataHolderBase implements FileEditor {
 
     BpmnCompareEditor(Project project, VirtualFile file) {
         this.file = file;
-        this.panel = new BpmnComparePanel(project, file);
+        this.panel = new BpmnComparePanel(project, file,
+                new BpmnContentSource.Working(file),
+                new BpmnContentSource.Revision(project, file, RevisionItem.HEAD));
         Disposer.register(this, panel);
     }
 

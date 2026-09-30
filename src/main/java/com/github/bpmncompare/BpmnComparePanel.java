@@ -21,7 +21,6 @@ import com.intellij.openapi.ui.popup.util.BaseListPopupStep;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.VcsException;
-import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.ColorUtil;
 import com.intellij.ui.JBColor;
@@ -40,12 +39,15 @@ import org.cef.handler.CefLoadHandlerAdapter;
 import org.cef.handler.CefRequestHandlerAdapter;
 import org.cef.network.CefRequest;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
 import java.io.IOException;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -71,17 +73,34 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     private boolean pageReady;
     private volatile boolean disposed;
 
-    private GitRepository repository;
-    private boolean repositoryResolved;
+    private BpmnContentSource leftSource;
+    private BpmnContentSource rightSource;
+    private DiagramSide leftSide;
+    private DiagramSide rightSide;
 
-    private RevisionItem revision = RevisionItem.HEAD;
-    private DiagramSide right = DiagramSide.message("Loading " + RevisionItem.HEAD.shortLabel() + "…");
-    private int revisionRequest;
+    /** Per side, so a slow load of one pane cannot discard a newer load of the other. */
+    private final EnumMap<Side, Integer> requests = new EnumMap<>(Side.class);
 
-    BpmnComparePanel(Project project, VirtualFile file) {
+    private enum Side {
+        LEFT, RIGHT;
+
+        String key() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+    }
+
+    /**
+     * @param file the file the left side belongs to, used for the document listener and the toolbar
+     *             title; {@code null} when neither side is backed by a file in the project
+     */
+    BpmnComparePanel(Project project, @Nullable VirtualFile file, BpmnContentSource left, BpmnContentSource right) {
         super(new BorderLayout());
         this.project = project;
         this.file = file;
+        this.leftSource = left;
+        this.rightSource = right;
+        this.leftSide = DiagramSide.message("Loading " + left.label() + "…");
+        this.rightSide = DiagramSide.message("Loading " + right.label() + "…");
         add(createToolbar(), BorderLayout.NORTH);
     }
 
@@ -122,13 +141,13 @@ final class BpmnComparePanel extends JPanel implements Disposable {
             return;
         }
 
-        Document document = FileDocumentManager.getInstance().getDocument(file);
+        Document document = documentOfFile();
         if (document != null) {
             document.addDocumentListener(new DocumentListener() {
                 @Override
                 public void documentChanged(@NotNull DocumentEvent event) {
                     documentAlarm.cancelAllRequests();
-                    documentAlarm.addRequest(() -> pushDiagrams(true), DOCUMENT_UPDATE_DELAY_MS);
+                    documentAlarm.addRequest(() -> reloadSide(Side.LEFT, leftSource, true), DOCUMENT_UPDATE_DELAY_MS);
                 }
             }, this);
         }
@@ -136,7 +155,11 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         ApplicationManager.getApplication().getMessageBus().connect(this)
                 .subscribe(LafManagerListener.TOPIC, source -> pushTheme());
 
-        loadRevision(revision);
+        reloadBothSides();
+    }
+
+    private @Nullable Document documentOfFile() {
+        return file == null ? null : FileDocumentManager.getInstance().getDocument(file);
     }
 
     /**
@@ -180,26 +203,28 @@ final class BpmnComparePanel extends JPanel implements Disposable {
                 JBUI.Borders.customLineBottom(JBColor.border()),
                 JBUI.Borders.empty(3, 8)));
 
-        JBLabel current = new JBLabel("Current: " + file.getName(), AllIcons.Actions.Diff, SwingConstants.LEFT);
-        current.setToolTipText(file.getPresentableUrl());
+        JBLabel current = new JBLabel(leftSource.label(), AllIcons.Actions.Diff, SwingConstants.LEFT);
+        current.setToolTipText(file == null ? leftSource.label() : file.getPresentableUrl());
         bar.add(current, BorderLayout.WEST);
 
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, JBUI.scale(6), 0));
         controls.setOpaque(false);
 
-        controls.add(new JBLabel("Compare with:"));
-        revisionButton.setText(revision.shortLabel() + "  ▾");
-        revisionButton.setIcon(AllIcons.Vcs.Branch);
-        revisionButton.setToolTipText("Choose a branch, tag or commit to compare with");
-        revisionButton.addActionListener(e -> chooseRevision());
-        controls.add(revisionButton);
+        // only a revision-backed right side can be pointed somewhere else; in a diff window both
+        // sides are fixed by the request, so the chooser would have nothing to offer
+        RevisionItem revision = rightSource.revision();
+        if (revision != null) {
+            controls.add(new JBLabel("Compare with:"));
+            revisionButton.setText(revision.shortLabel() + "  ▾");
+            revisionButton.setIcon(AllIcons.Vcs.Branch);
+            revisionButton.setToolTipText("Choose a branch, tag or commit to compare with");
+            revisionButton.addActionListener(e -> chooseRevision());
+            controls.add(revisionButton);
+        }
 
         JButton refresh = new JButton(AllIcons.Actions.Refresh);
         refresh.setToolTipText("Reload both diagrams");
-        refresh.addActionListener(e -> {
-            forgetRepository();
-            loadRevision(revision);
-        });
+        refresh.addActionListener(e -> reloadBothSides());
         controls.add(refresh);
 
         syncBox.setToolTipText("Mirror the mouse cursor, hover and pan/zoom between both diagrams");
@@ -231,7 +256,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
 
             @Override
             public void run(@NotNull ProgressIndicator indicator) {
-                GitRepository repo = resolveRepository();
+                GitRepository repo = file == null ? null : GitRevisions.repositoryFor(project, file);
                 if (repo == null) {
                     error = "The file is not under Git version control.";
                     return;
@@ -289,7 +314,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
             @Override
             public int getDefaultOptionIndex() {
                 for (int i = 0; i < getValues().size(); i++) {
-                    if (getValues().get(i).equals(revision)) {
+                    if (getValues().get(i).equals(rightSource.revision())) {
                         return i;
                     }
                 }
@@ -324,54 +349,49 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         }
     }
 
+    /** Points the right side at another revision. */
     private void loadRevision(RevisionItem item) {
-        revision = item;
+        rightSource = rightSource.at(item);
         revisionButton.setText(item.shortLabel() + "  ▾");
-        int request = ++revisionRequest;
-        pushStatus("right", "Loading " + item.shortLabel() + "…");
+        reloadSide(Side.RIGHT, rightSource, false);
+    }
 
-        new Task.Backgroundable(project, "Loading " + file.getName() + " at " + item.shortLabel(), false) {
+    private void reloadBothSides() {
+        reloadSide(Side.LEFT, leftSource, false);
+        reloadSide(Side.RIGHT, rightSource, false);
+    }
+
+    /**
+     * Loads one side in the background and pushes the result to the web view.
+     *
+     * @param preserveView keep the current pan and zoom instead of fitting the diagram again
+     */
+    private void reloadSide(Side side, BpmnContentSource source, boolean preserveView) {
+        int request = requests.merge(side, 1, Integer::sum);
+        pushStatus(side.key(), "Loading " + source.label() + "…");
+
+        new Task.Backgroundable(project, "Loading " + source.label(), false) {
             private DiagramSide result;
 
             @Override
             public void run(@NotNull ProgressIndicator indicator) {
-                GitRepository repo = resolveRepository();
-                if (repo == null) {
-                    result = DiagramSide.error(item.label(), "The file is not under Git version control.");
-                    return;
-                }
-                String hash = GitRevisions.shortHash(project, repo, item.revision());
-                String label = hash == null || hash.equals(item.revision()) ? item.label() : item.shortLabel() + " (" + hash + ")";
-                try {
-                    result = DiagramSide.xml(GitRevisions.content(project, repo, file, item.revision()), label);
-                } catch (GitRevisions.MissingInRevisionException e) {
-                    result = DiagramSide.missing(label, "The file does not exist in " + item.shortLabel() + ".\nEverything in the current version is new.");
-                } catch (VcsException e) {
-                    result = DiagramSide.error(label, e.getMessage());
-                }
+                result = source.load();
             }
 
             @Override
             public void onSuccess() {
-                if (request == revisionRequest && !disposed) {
-                    right = result;
-                    pushDiagrams(false);
+                // a newer request for this side has been started meanwhile - its result wins
+                if (request != requests.get(side) || disposed) {
+                    return;
                 }
+                if (side == Side.LEFT) {
+                    leftSide = result;
+                } else {
+                    rightSide = result;
+                }
+                pushDiagrams(preserveView);
             }
         }.queue();
-    }
-
-    private synchronized void forgetRepository() {
-        repositoryResolved = false;
-    }
-
-    /** Called from background tasks. */
-    private synchronized GitRepository resolveRepository() {
-        if (!repositoryResolved) {
-            repository = GitRevisions.repositoryFor(project, file);
-            repositoryResolved = true;
-        }
-        return repository;
     }
 
     // ------------------------------------------------------------------------------------------------------------
@@ -388,18 +408,9 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         if (!pageReady) {
             return;
         }
-        Map<String, Object> left = new LinkedHashMap<>();
-        String currentXml = currentText();
-        if (StringUtil.isEmptyOrSpaces(currentXml)) {
-            left.put("error", "The current file is empty.");
-        } else {
-            left.put("xml", currentXml);
-        }
-        left.put("label", "working copy · " + file.getName());
-
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("left", left);
-        payload.put("right", right.toJson());
+        payload.put("left", leftSide.toJson());
+        payload.put("right", rightSide.toJson());
         payload.put("preserveView", preserveView);
         call("setDiagrams", payload);
     }
@@ -439,18 +450,6 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     private void executeScript(String script) {
         CefBrowser cefBrowser = browser.getCefBrowser();
         cefBrowser.executeJavaScript(script, cefBrowser.getURL(), 0);
-    }
-
-    private String currentText() {
-        Document document = FileDocumentManager.getInstance().getDocument(file);
-        if (document != null) {
-            return document.getText();
-        }
-        try {
-            return VfsUtilCore.loadText(file);
-        } catch (IOException e) {
-            return "";
-        }
     }
 
     @Override
