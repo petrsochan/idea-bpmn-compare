@@ -39,6 +39,8 @@ Every push to `main` and every pull request is built by GitHub Actions (`.github
 the plugin ZIP is attached to the workflow run as an artifact.
 
 Target: IntelliJ IDEA 2026.2+ (build 262) – in this version JCEF and DVCS are separate platform modules.
+Those IDEs run on JBR 21, so the plugin is compiled to Java 21 bytecode. Earlier IDEs are not supported;
+compatibility is checked by the IntelliJ Plugin Verifier (`./gradlew verifyPlugin`) as part of the build.
 
 ## Structure
 - `src/main/java/com/github/bpmncompare/` – editor tab (`BpmnCompareEditorProvider`), UI + JCEF bridge (`BpmnComparePanel`), Git (`GitRevisions`)

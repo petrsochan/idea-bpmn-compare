@@ -8,7 +8,7 @@ plugins {
 group = providers.gradleProperty("pluginGroup").get()
 version = providers.gradleProperty("pluginVersion").get()
 
-// Java 21 bytecode so the plugin also loads in 2025.x IDEs
+// 2026.2 runs on JBR 21; targeting 21 keeps the bytecode loadable across the supported range
 tasks.withType<JavaCompile>().configureEach {
     options.release = 21
     options.encoding = "UTF-8"
