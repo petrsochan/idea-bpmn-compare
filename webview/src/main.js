@@ -846,8 +846,18 @@ function isChangeListHidden() {
 function setChangeListVisible(visible) {
   document.getElementById('changes').hidden = !visible;
   document.getElementById('toggle-changes').classList.toggle('active', visible);
+  updateChangeListTooltip();
   resizeAll();
 }
+
+/** The tooltip follows the state, the way the filter chips do. */
+function updateChangeListTooltip() {
+  document.getElementById('toggle-changes').title = isChangeListHidden()
+    ? 'Show the list of all changes; click an entry to centre that element'
+    : 'Hide the list of changes (Escape)';
+}
+
+updateChangeListTooltip();
 
 // ---------------------------------------------------------------------------
 // export
