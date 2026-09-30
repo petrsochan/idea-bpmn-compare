@@ -65,6 +65,14 @@ function createPane(side) {
 
   eventBus.on('element.out', (event) => setSyncHover(other(side), event.element.id, false));
 
+  // double-click opens the element in the XML editor; only the working copy has a document to open,
+  // a past revision has none
+  eventBus.on('element.dblclick', (event) => {
+    if (side === 'left') {
+      sendToHost({ command: 'openXml', id: event.element.id });
+    }
+  });
+
   canvasEl.addEventListener('mousemove', (event) => {
     if (syncEnabled) {
       mirrorCursor(pane, event);
@@ -78,6 +86,13 @@ function createPane(side) {
 
 function other(side) {
   return side === 'left' ? 'right' : 'left';
+}
+
+/** Sends a message to the IDE. The bridge is absent until the host injects it, and in a plain browser. */
+function sendToHost(message) {
+  if (window.bpmnCompareHost) {
+    window.bpmnCompareHost(message);
+  }
 }
 
 function canvasOf(pane) {

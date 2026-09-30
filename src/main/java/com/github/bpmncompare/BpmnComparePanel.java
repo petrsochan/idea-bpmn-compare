@@ -10,6 +10,7 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
+import com.intellij.openapi.fileEditor.OpenFileDescriptor;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
@@ -29,6 +30,8 @@ import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.jcef.JBCefApp;
 import com.intellij.ui.jcef.JBCefBrowser;
+import com.intellij.ui.jcef.JBCefBrowserBase;
+import com.intellij.ui.jcef.JBCefJSQuery;
 import com.intellij.util.Alarm;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
@@ -74,6 +77,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     private final Alarm gitAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
 
     private JBCefBrowser browser;
+    private JBCefJSQuery hostQuery;
     private boolean initialized;
     private boolean pageReady;
     private volatile boolean disposed;
@@ -124,6 +128,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
 
         browser = JBCefBrowser.createBuilder().build();
         Disposer.register(this, browser);
+        installHostBridge();
         browser.getJBCefClient().addLoadHandler(new CefLoadHandlerAdapter() {
             @Override
             public void onLoadEnd(CefBrowser cefBrowser, CefFrame frame, int httpStatusCode) {
@@ -190,6 +195,57 @@ final class BpmnComparePanel extends JPanel implements Disposable {
 
     private @Nullable Document documentOfFile() {
         return file == null ? null : FileDocumentManager.getInstance().getDocument(file);
+    }
+
+    // ------------------------------------------------------------------------------------------------------------
+    // web view -> IDE bridge
+    // ------------------------------------------------------------------------------------------------------------
+
+    /**
+     * Gives the page a {@code window.bpmnCompareHost(message)} function for talking back to the IDE.
+     *
+     * <p>Registered before the handler that marks the page ready, because CEF calls load handlers in
+     * registration order and the page must have the bridge by the time it is told it can use it.
+     */
+    private void installHostBridge() {
+        hostQuery = JBCefJSQuery.create((JBCefBrowserBase) browser);
+        Disposer.register(this, hostQuery);
+        hostQuery.addHandler(request -> {
+            handleHostRequest(request);
+            return null;
+        });
+        browser.getJBCefClient().addLoadHandler(new CefLoadHandlerAdapter() {
+            @Override
+            public void onLoadEnd(CefBrowser cefBrowser, CefFrame frame, int httpStatusCode) {
+                if (frame.isMain()) {
+                    executeScript("window.bpmnCompareHost = function(message) {"
+                            + hostQuery.inject("JSON.stringify(message)") + "};");
+                }
+            }
+        }, browser.getCefBrowser());
+    }
+
+    private void handleHostRequest(String json) {
+        Map<String, Object> message = Json.read(json);
+        String command = String.valueOf(message.get("command"));
+        if ("openXml".equals(command)) {
+            ApplicationManager.getApplication().invokeLater(
+                    () -> openXml(String.valueOf(message.get("id"))), o -> disposed);
+        } else {
+            LOG.warn("Unknown web view command: " + command);
+        }
+    }
+
+    /** Opens the text editor of the file with the caret on the element carrying {@code id}. */
+    private void openXml(String id) {
+        Document document = documentOfFile();
+        if (document == null || file == null) {
+            return;
+        }
+        int offset = BpmnXmlLocator.offsetOfElement(document.getText(), id);
+        if (offset >= 0) {
+            new OpenFileDescriptor(project, file, offset).navigate(true);
+        }
     }
 
     /**
