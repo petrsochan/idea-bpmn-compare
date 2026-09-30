@@ -27,7 +27,6 @@ final class GitRevisions {
 
     private static final int MAX_COMMITS = 300;
     private static final int MAX_TAGS = 50;
-    private static final char FIELD_SEPARATOR = '';
 
     private GitRevisions() {
     }
@@ -75,26 +74,13 @@ final class GitRevisions {
     private static List<RevisionItem> fileHistory(Project project, GitRepository repository, VirtualFile file) throws VcsException {
         GitLineHandler handler = new GitLineHandler(project, repository.getRoot(), GitCommand.LOG);
         handler.setSilent(true);
-        handler.addParameters(
-                "--max-count=" + MAX_COMMITS,
-                "--date=short",
-                "--pretty=format:%H%x1f%h%x1f%ad%x1f%an%x1f%s");
+        handler.addParameters("--max-count=" + MAX_COMMITS, "--date=short", GitLogParser.FORMAT);
         handler.endOptions();
         handler.addRelativeFiles(List.of(file));
 
         GitCommandResult result = Git.getInstance().runCommand(handler);
         result.throwOnError();
-
-        List<RevisionItem> commits = new ArrayList<>();
-        for (String line : result.getOutput()) {
-            String[] f = line.split(String.valueOf(FIELD_SEPARATOR), 5);
-            if (f.length < 5) {
-                continue;
-            }
-            String label = f[1] + "  " + f[2] + "  " + f[3] + "  —  " + abbreviate(f[4], 90);
-            commits.add(new RevisionItem(RevisionItem.Group.COMMIT, f[0], label, f[1] + " " + abbreviate(f[4], 30)));
-        }
-        return commits;
+        return GitLogParser.parse(result.getOutput());
     }
 
     /** Resolves a revision to its abbreviated commit hash, or {@code null} if it cannot be resolved. */
@@ -133,10 +119,6 @@ final class GitRevisions {
 
     private static String stripBom(String text) {
         return !text.isEmpty() && text.charAt(0) == '﻿' ? text.substring(1) : text;
-    }
-
-    private static String abbreviate(String text, int max) {
-        return text.length() <= max ? text : text.substring(0, max - 1) + "…";
     }
 
     static final class MissingInRevisionException extends VcsException {
