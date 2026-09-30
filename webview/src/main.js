@@ -170,7 +170,10 @@ async function render(payload) {
       changes = { _added: collectFlowElements(panes.left), _removed: {}, _changed: {}, _layoutChanged: {} };
     }
 
-    currentChanges = toChangeList(changes);
+    // the element maps let toChangeList also compare extensionElements, which the differ ignores
+    currentChanges = toChangeList(changes,
+      panes.left.loaded ? collectFlowElements(panes.left) : {},
+      panes.right.loaded ? collectFlowElements(panes.right) : {});
 
     decorate(currentChanges);
     renderSummary(currentChanges, newDefs, oldDefs);

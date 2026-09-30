@@ -1,3 +1,4 @@
+import { compareExtensions } from './extensions.js';
 import { displayName, normalizeAttrs } from './format.js';
 
 /**
@@ -14,7 +15,7 @@ export const KINDS = [ 'added', 'removed', 'changed', 'layout' ];
  * `kinds`; otherwise the chip counts would disagree with the list. `kind` is the first matching
  * {@link KINDS} entry and decides how the element is drawn.
  */
-export function toChangeList(changes) {
+export function toChangeList(changes, newElements = {}, oldElements = {}) {
   if (!changes) {
     return [];
   }
@@ -52,6 +53,8 @@ export function toChangeList(changes) {
     entry(id, model).kinds.add('layout');
   }
 
+  addExtensionChanges(byId, entry, newElements, oldElements);
+
   const list = [ ...byId.values() ];
 
   for (const e of list) {
@@ -61,4 +64,33 @@ export function toChangeList(changes) {
   list.sort((a, b) => KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind) || displayName(a).localeCompare(displayName(b)));
 
   return list;
+}
+
+/**
+ * Adds what bpmn-js-differ cannot see: differences inside extensionElements.
+ *
+ * An element present on both sides gets its extension differences merged into its attributes - and
+ * becomes a `changed` entry even when the differ reported nothing about it at all, which is the case
+ * for a pure Camunda or Zeebe edit. An element only on one side is already reported as added or
+ * removed, so its extensions add no information there.
+ */
+function addExtensionChanges(byId, entry, newElements, oldElements) {
+  for (const [ id, newElement ] of Object.entries(newElements)) {
+    const oldElement = oldElements[id];
+
+    if (!oldElement) {
+      continue;
+    }
+
+    const extensionAttrs = compareExtensions(oldElement, newElement);
+
+    if (!Object.keys(extensionAttrs).length) {
+      continue;
+    }
+
+    const e = entry(id, newElement);
+    e.kinds.add('changed');
+    // these are already oriented old = revision, new = current, so they bypass normalizeAttrs
+    e.attrs = Object.assign(e.attrs || {}, extensionAttrs);
+  }
 }
