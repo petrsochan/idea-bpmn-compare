@@ -1424,6 +1424,14 @@ git commit -m "Export the diagrams as SVG or PNG and the change list as Markdown
 
 ### Task 18: Cut version 1.1.0
 
+> **Status: deliberately not done.** Everything through Phase 8 is implemented, committed and passes
+> `./gradlew clean check buildPlugin verifyPluginStructure verifyPlugin` — Compatible against
+> IU-262.10968.63 and IU-263.5701.42, no compatibility problems and no deprecated API usages.
+> The release is held back because the *runtime* verification steps of phases 3–8 never ran: a sandbox
+> IDE started for the Task 10 check stayed open and keeps the plugin jar memory-mapped, so `runIde`
+> fails with a file lock. Close that sandbox IDE, work through the manual checks listed in each
+> phase's verification step, and only then do this task.
+
 **Files:** `gradle.properties`, `CHANGELOG.md`, `README.md`
 
 - [ ] **Step 1: Close the changelog section**
