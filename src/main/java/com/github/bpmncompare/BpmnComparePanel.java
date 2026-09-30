@@ -21,6 +21,7 @@ import com.intellij.openapi.ui.popup.util.BaseListPopupStep;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.VcsException;
+import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.ColorUtil;
 import com.intellij.ui.JBColor;
@@ -32,6 +33,7 @@ import com.intellij.util.Alarm;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import git4idea.repo.GitRepository;
+import git4idea.repo.GitRepositoryChangeListener;
 import org.cef.browser.CefBrowser;
 import org.cef.browser.CefFrame;
 import org.cef.handler.CefLifeSpanHandlerAdapter;
@@ -60,6 +62,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
 
     private static final Logger LOG = Logger.getInstance(BpmnComparePanel.class);
     private static final int DOCUMENT_UPDATE_DELAY_MS = 600;
+    private static final int GIT_UPDATE_DELAY_MS = 400;
 
     private final Project project;
     private final VirtualFile file;
@@ -67,6 +70,8 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     private final JButton revisionButton = new JButton();
     private final JBCheckBox syncBox = new JBCheckBox("Synchronize mouse & view", BpmnCompareSettings.isSyncEnabled());
     private final Alarm documentAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
+    /** Separate from {@link #documentAlarm} so an edit and a repository change cannot cancel each other. */
+    private final Alarm gitAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
 
     private JBCefBrowser browser;
     private boolean initialized;
@@ -155,8 +160,32 @@ final class BpmnComparePanel extends JPanel implements Disposable {
 
         ApplicationManager.getApplication().getMessageBus().connect(this)
                 .subscribe(LafManagerListener.TOPIC, source -> pushTheme());
+        subscribeToGitChanges();
 
         reloadBothSides();
+    }
+
+    /**
+     * After a checkout, commit, fetch or rebase the same revision expression resolves somewhere else,
+     * so a view pinned to HEAD or a branch would keep showing the previous content until the user
+     * pressed Refresh. Only a revision-backed side needs this; fixed content cannot go stale.
+     */
+    private void subscribeToGitChanges() {
+        if (rightSource.revision() == null || file == null) {
+            return;
+        }
+        project.getMessageBus().connect(this).subscribe(GitRepository.GIT_REPO_CHANGE,
+                (GitRepositoryChangeListener) repository -> {
+                    // a plain parent-chain check, so the listener needs no read action to decide
+                    if (!VfsUtilCore.isAncestor(repository.getRoot(), file, false)) {
+                        return;
+                    }
+                    ApplicationManager.getApplication().invokeLater(() -> {
+                        // a rebase fires a burst of these; only the last one needs to do the work
+                        gitAlarm.cancelAllRequests();
+                        gitAlarm.addRequest(() -> reloadSide(Side.RIGHT, rightSource, true), GIT_UPDATE_DELAY_MS);
+                    }, o -> disposed);
+                });
     }
 
     private @Nullable Document documentOfFile() {
