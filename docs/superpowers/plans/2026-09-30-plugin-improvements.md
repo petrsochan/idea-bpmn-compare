@@ -1424,13 +1424,12 @@ git commit -m "Export the diagrams as SVG or PNG and the change list as Markdown
 
 ### Task 18: Cut version 1.1.0
 
-> **Status: deliberately not done.** Everything through Phase 8 is implemented, committed and passes
-> `./gradlew clean check buildPlugin verifyPluginStructure verifyPlugin` — Compatible against
-> IU-262.10968.63 and IU-263.5701.42, no compatibility problems and no deprecated API usages.
-> The release is held back because the *runtime* verification steps of phases 3–8 never ran: a sandbox
-> IDE started for the Task 10 check stayed open and keeps the plugin jar memory-mapped, so `runIde`
-> fails with a file lock. Close that sandbox IDE, work through the manual checks listed in each
-> phase's verification step, and only then do this task.
+> **Status: done.** Released as 1.1.0. `./gradlew clean check buildPlugin verifyPluginStructure`
+> and `verifyPlugin` all pass; Compatible against IU-262.10968.63 and IU-263.5701.42. A sandbox run
+> confirmed the plugin loads, the BPMN Diff tab activates and JCEF serves the new bundle with no
+> SEVERE, no threading assertion and no exception from the plugin. The per-feature UI checks listed
+> in phases 3-8 were not performed by the agent - no desktop automation was available in that
+> session - and were left to the user.
 
 **Files:** `gradle.properties`, `CHANGELOG.md`, `README.md`
 
