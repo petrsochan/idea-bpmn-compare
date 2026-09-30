@@ -49,6 +49,16 @@ intellijPlatform {
 
     pluginConfiguration {
         version = providers.gradleProperty("pluginVersion")
+        // "What's new" in the plugin manager and on the Marketplace, taken from the CHANGELOG.md
+        // section of the version being built, so the changelog stays the single source of truth.
+        changeNotes = providers.provider {
+            val version = providers.gradleProperty("pluginVersion").get()
+            val changelog = layout.projectDirectory.file("CHANGELOG.md").asFile.readText()
+            val section = Regex("(?ms)^## \\[${Regex.escape(version)}]\\s*(.*?)(?=^## \\[|\\z)")
+                .find(changelog)?.groupValues?.get(1)?.trim()
+                ?: error("CHANGELOG.md has no section for version $version")
+            markdownToHtml(section)
+        }
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")
             untilBuild = provider { null }
@@ -109,3 +119,54 @@ tasks.jar {
 tasks.test {
     useJUnitPlatform()
 }
+
+// ---- changelog -> change-notes ------------------------------------------------------------
+
+/**
+ * Minimal markdown to HTML conversion for one changelog section. `change-notes` is HTML and is
+ * validated, so raw markdown would be rendered as a single unreadable blob in the plugin manager.
+ * Supports what CHANGELOG.md actually uses: `### headings`, `- item` lists and `[text](url)` links.
+ */
+fun markdownToHtml(markdown: String): String {
+    val html = StringBuilder()
+    var inList = false
+
+    fun closeList() {
+        if (inList) {
+            html.append("</ul>")
+            inList = false
+        }
+    }
+
+    for (raw in markdown.lines()) {
+        val line = raw.trim()
+        when {
+            line.startsWith("### ") -> {
+                closeList()
+                html.append("<b>").append(escapeHtml(line.removePrefix("### "))).append("</b>")
+            }
+            line.startsWith("- ") -> {
+                if (!inList) {
+                    html.append("<ul>")
+                    inList = true
+                }
+                html.append("<li>").append(inlineMarkdown(line.removePrefix("- "))).append("</li>")
+            }
+            line.isEmpty() -> closeList()
+            else -> {
+                closeList()
+                html.append("<p>").append(inlineMarkdown(line)).append("</p>")
+            }
+        }
+    }
+    closeList()
+    return html.toString()
+}
+
+fun inlineMarkdown(text: String): String =
+    Regex("\\[([^]]+)]\\(([^)]+)\\)").replace(escapeHtml(text)) { match ->
+        "<a href=\"${match.groupValues[2]}\">${match.groupValues[1]}</a>"
+    }
+
+fun escapeHtml(text: String): String =
+    text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")

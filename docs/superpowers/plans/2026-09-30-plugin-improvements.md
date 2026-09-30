@@ -125,7 +125,7 @@ The Marketplace requires exactly `META-INF/pluginIcon.svg` with a 40×40 viewBox
 - [ ] **Step 2: Verify the icon is picked up**
 
 Run: `./gradlew verifyPluginStructure`
-Expected: `BUILD SUCCESSFUL` with no "plugin icon" warning in the output. Record whether the warning appeared *before* this task, to prove the task did something.
+Expected: `BUILD SUCCESSFUL`. Note: this task does *not* warn about a missing icon in 2026.2, so it proves nothing here — verify instead that `META-INF/pluginIcon.svg` is present inside `idea-bpmn-compare/lib/idea-bpmn-compare-<version>.jar` of the built distribution ZIP.
 
 - [ ] **Step 3: Commit**
 
@@ -185,7 +185,7 @@ Add `markdownToHtml` as a top-level function at the end of `build.gradle.kts`, h
 
 - [ ] **Step 3: Verify the notes reach the built descriptor**
 
-Run: `./gradlew patchPluginXml && grep -A3 change-notes build/patchedPluginXmlFiles/plugin.xml`
+Run: `./gradlew patchPluginXml && grep -A3 change-notes build/tmp/patchPluginXml/plugin.xml`
 Expected: a `<change-notes>` element containing `<ul><li>Zoom controls`.
 
 - [ ] **Step 4: Verify a missing section fails the build**
@@ -1445,7 +1445,7 @@ Expected: `BUILD SUCCESSFUL`, `build/distributions/idea-bpmn-compare-1.1.0.zip` 
 
 - [ ] **Step 5: Confirm the change notes made it in**
 
-Run: `grep -c Camunda build/patchedPluginXmlFiles/plugin.xml`
+Run: `grep -c Camunda build/tmp/patchPluginXml/plugin.xml`
 Expected: at least `1` — proof the 1.1.0 section reached `<change-notes>`.
 
 - [ ] **Step 6: Install the built ZIP into a real IDE**
