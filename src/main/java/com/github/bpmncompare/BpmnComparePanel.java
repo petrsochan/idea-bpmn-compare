@@ -12,8 +12,11 @@ import com.intellij.openapi.editor.event.CaretEvent;
 import com.intellij.openapi.editor.event.CaretListener;
 import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
+import com.intellij.openapi.fileChooser.FileChooserFactory;
+import com.intellij.openapi.fileChooser.FileSaverDescriptor;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
+import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
@@ -25,8 +28,10 @@ import com.intellij.openapi.ui.popup.util.BaseListPopupStep;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.VcsException;
+import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileWrapper;
 import com.intellij.ui.ColorUtil;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBCheckBox;
@@ -51,7 +56,12 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.datatransfer.StringSelection;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Base64;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -237,12 +247,46 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     private void handleHostRequest(String json) {
         Map<String, Object> message = Json.read(json);
         String command = String.valueOf(message.get("command"));
-        if ("openXml".equals(command)) {
-            ApplicationManager.getApplication().invokeLater(
-                    () -> openXml(String.valueOf(message.get("id"))), o -> disposed);
-        } else {
-            LOG.warn("Unknown web view command: " + command);
+        String payload = String.valueOf(message.get("payload"));
+        switch (command) {
+            case "openXml" -> onEdt(() -> openXml(String.valueOf(message.get("id"))));
+            case "copyMarkdown" -> onEdt(() -> CopyPasteManager.getInstance().setContents(new StringSelection(payload)));
+            case "saveSvg" -> onEdt(() -> saveExport("svg", payload.getBytes(StandardCharsets.UTF_8)));
+            case "savePng" -> onEdt(() -> saveExport("png", decodeDataUrl(payload)));
+            case "exportFailed" -> onEdt(() -> Messages.showErrorDialog(project, payload, "BPMN Compare"));
+            default -> LOG.warn("Unknown web view command: " + command);
         }
+    }
+
+    private void onEdt(Runnable action) {
+        ApplicationManager.getApplication().invokeLater(action, o -> disposed);
+    }
+
+    /** Asks for a target file and writes the exported bytes there. */
+    private void saveExport(String extension, byte[] bytes) {
+        String upper = extension.toUpperCase(Locale.ROOT);
+        FileSaverDescriptor descriptor =
+                new FileSaverDescriptor("Export BPMN Diagram", "Save the diagram as " + upper, extension);
+        String name = (file == null ? "diagram" : file.getNameWithoutExtension()) + "-diff." + extension;
+        VirtualFileWrapper target = FileChooserFactory.getInstance()
+                .createSaveFileDialog(descriptor, project)
+                .save((VirtualFile) null, name);
+        if (target == null) {
+            return;
+        }
+        Path path = target.getFile().toPath();
+        try {
+            Files.write(path, bytes);
+            VfsUtil.markDirtyAndRefresh(true, false, false, target.getVirtualFile());
+        } catch (IOException e) {
+            LOG.warn("Cannot write " + path, e);
+            Messages.showErrorDialog(project, "Cannot write " + path + ": " + e.getMessage(), "BPMN Compare");
+        }
+    }
+
+    private static byte[] decodeDataUrl(String dataUrl) {
+        int comma = dataUrl.indexOf(',');
+        return Base64.getDecoder().decode(comma < 0 ? dataUrl : dataUrl.substring(comma + 1));
     }
 
     /**

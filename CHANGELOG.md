@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **F7** / **Shift+F7** step through the visible changes, wrapping around; the change list highlights where you are. The toolbar has the same two buttons, and Escape closes the change list. Filtered-out kinds are skipped.
 - Double-clicking an element in the left diagram opens the XML editor with the caret on that element.
 - **Follow caret** (off by default) selects and centres the element the XML caret is in, which is useful with the diff view in a split next to the editor.
+- **Export**: the change list as Markdown into the clipboard (ready for a pull request, honouring the filter chips), or the left diagram as SVG or PNG with the change markers included.
 
 ### Changed
 - The compared revision reloads by itself after a commit, checkout, fetch or rebase, instead of showing the previous content until Refresh was pressed.

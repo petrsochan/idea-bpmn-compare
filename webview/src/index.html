@@ -24,6 +24,14 @@
       <button id="zoom-fit" class="bar-button" type="button" title="Fit the diagram into the window">Fit</button>
     </div>
     <button id="toggle-changes" class="bar-button" type="button">Changes list</button>
+    <div id="export-wrap">
+      <button id="export" class="bar-button" type="button" title="Export the diagram or the change list">Export</button>
+      <ul id="export-menu" hidden>
+        <li data-command="copyMarkdown">Copy change list as Markdown</li>
+        <li data-command="saveSvg">Save left diagram as SVG…</li>
+        <li data-command="savePng">Save left diagram as PNG…</li>
+      </ul>
+    </div>
   </div>
 
   <div id="panes">

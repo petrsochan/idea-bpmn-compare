@@ -3,6 +3,7 @@ import { diff } from 'bpmn-js-differ';
 import { getBBox } from 'diagram-js/lib/util/Elements';
 
 import { KINDS, toChangeList } from './changes.js';
+import { changesToMarkdown, svgToPng, viewerToSvg } from './export.js';
 import { describeAttrs, displayName, typeName } from './format.js';
 
 import 'bpmn-js/dist/assets/diagram-js.css';
@@ -184,6 +185,11 @@ async function render(payload) {
       // file does not exist in the revision -> everything is new
       changes = { _added: collectFlowElements(panes.left), _removed: {}, _changed: {}, _layoutChanged: {} };
     }
+
+    currentLabels = {
+      left: payload.left && payload.left.label || 'current',
+      right: payload.right && payload.right.label || 'revision'
+    };
 
     // the element maps let toChangeList also compare extensionElements, which the differ ignores
     currentChanges = toChangeList(changes,
@@ -841,6 +847,57 @@ function setChangeListVisible(visible) {
   document.getElementById('changes').hidden = !visible;
   document.getElementById('toggle-changes').classList.toggle('active', visible);
   resizeAll();
+}
+
+// ---------------------------------------------------------------------------
+// export
+// ---------------------------------------------------------------------------
+
+/** Labels of the two sides, kept for the markdown header. */
+let currentLabels = { left: '', right: '' };
+
+const exportMenu = document.getElementById('export-menu');
+
+document.getElementById('export').addEventListener('click', (event) => {
+  event.stopPropagation();
+  exportMenu.hidden = !exportMenu.hidden;
+  document.getElementById('export').classList.toggle('active', !exportMenu.hidden);
+});
+
+document.addEventListener('click', () => closeExportMenu());
+
+for (const item of exportMenu.querySelectorAll('li')) {
+  item.addEventListener('click', async () => {
+    closeExportMenu();
+
+    try {
+      await runExport(item.dataset.command);
+    } catch (err) {
+      console.error('[bpmn-compare] export failed', err);
+      sendToHost({ command: 'exportFailed', payload: String(err && err.message || err) });
+    }
+  });
+}
+
+function closeExportMenu() {
+  exportMenu.hidden = true;
+  document.getElementById('export').classList.remove('active');
+}
+
+async function runExport(command) {
+  if (command === 'copyMarkdown') {
+    // only what the user can see, so the export matches the change list on screen
+    sendToHost({ command, payload: changesToMarkdown(navigableChanges(), currentLabels) });
+    return;
+  }
+
+  if (!panes.left.loaded) {
+    return;
+  }
+
+  const svg = await viewerToSvg(panes.left.viewer);
+
+  sendToHost({ command, payload: command === 'savePng' ? await svgToPng(svg) : svg });
 }
 
 document.getElementById('change-prev').addEventListener('click', () => goToChange(-1));

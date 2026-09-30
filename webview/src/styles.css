@@ -266,3 +266,25 @@ button.chip:hover { border-color: var(--accent); }
 .diff-badge.removed { background: var(--removed); }
 .diff-badge.changed { background: var(--changed); }
 .diff-badge.layout { background: var(--layout); }
+
+/* ---- export menu ---- */
+
+#export-wrap { position: relative; }
+
+#export-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 3px);
+  z-index: 20;
+  margin: 0;
+  padding: 3px 0;
+  list-style: none;
+  min-width: 210px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+}
+#export-menu[hidden] { display: none; }
+#export-menu li { padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+#export-menu li:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
