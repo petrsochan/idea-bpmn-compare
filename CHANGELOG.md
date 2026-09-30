@@ -5,21 +5,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Fixed
-- Tooltips in the diff view are shown at last. None of them had ever been visible — not on the toolbar buttons or filter chips, and not on the change badges, even though the badge tooltip with the changed attributes is a documented feature. Inside JCEF a native tooltip is only shown if the host draws it, so the view now draws its own.
-
 ## [1.1.0]
 
 ### Added
-- The BPMN view is available in every IDE diff window - the commit dialog, the Git log, *Compare with Branch*, *Compare Two Files*. Pick **BPMN diagram** in the diff tool selector; the text diff stays the default. This is also the only way to compare two revisions of a diagram with each other.
-- Changes inside `extensionElements` are reported too - Camunda execution listeners, input/output mappings and form fields, and Zeebe task definitions. bpmn-js-differ ignores them, so until now an edit that only touched a Camunda listener showed no change at all.
-- **F7** / **Shift+F7** step through the visible changes, wrapping around; the change list highlights where you are. The toolbar has the same two buttons, and Escape closes the change list. Filtered-out kinds are skipped.
-- Double-clicking an element in the left diagram opens the XML editor with the caret on that element.
-- **Follow caret** (off by default) selects and centres the element the XML caret is in, which is useful with the diff view in a split next to the editor.
-- **Export**: the change list as Markdown into the clipboard (ready for a pull request, honouring the filter chips), or the left diagram as SVG or PNG with the change markers included.
+- The BPMN view is available in every IDE diff window — the commit dialog, the Git log, *Compare with Branch*, *Compare Two Files*. Pick **BPMN diagram** in the diff tool selector; the text diff stays the default. This is also the only way to compare two revisions of a diagram with each other, which the editor tab cannot do.
+- Changes inside `extensionElements` are reported too — Camunda execution listeners, input/output mappings and form fields, and Zeebe task definitions. `bpmn-js-differ` ignores them, so until now an edit that touched only a Camunda listener showed no change at all.
+- **F7** / **Shift+F7** step through the visible changes, wrapping around and skipping kinds hidden by a filter chip; the change list highlights where you are, the top bar has the same two buttons, and Escape closes the list.
+- Navigation between the diagram and the XML: double-click an element to open the editor with the caret on it, and **Follow caret** (off by default) does the reverse, selecting the element the caret is in.
+- **Export**: the change list as Markdown into the clipboard, ready for a pull request and honouring the filter chips, or the left diagram as SVG or PNG with the change markers included.
 
 ### Changed
 - The compared revision reloads by itself after a commit, checkout, fetch or rebase, instead of showing the previous content until Refresh was pressed.
+
+### Fixed
+- Tooltips in the diff view are shown at last. None of them had ever been visible — not on the top bar buttons or the filter chips, and not on the change badges, even though the badge tooltip listing the changed attributes is a documented feature. Inside JCEF a native tooltip only appears if the host draws it, so the view now draws its own.
 
 ## [1.0.1]
 

@@ -194,10 +194,17 @@ fun markdownToHtml(markdown: String): String {
     return html.toString()
 }
 
-fun inlineMarkdown(text: String): String =
-    Regex("\\[([^]]+)]\\(([^)]+)\\)").replace(escapeHtml(text)) { match ->
-        "<a href=\"${match.groupValues[2]}\">${match.groupValues[1]}</a>"
-    }
+/** Inline markdown of a changelog line: links, `code`, **bold**, *italic*. */
+fun inlineMarkdown(text: String): String {
+    var html = escapeHtml(text)
+    // code first, so markers inside a code span are left alone
+    html = Regex("`([^`]+)`").replace(html) { "<code>${it.groupValues[1]}</code>" }
+    html = Regex("\\[([^]]+)]\\(([^)]+)\\)").replace(html) { "<a href=\"${it.groupValues[2]}\">${it.groupValues[1]}</a>" }
+    // bold before italic, otherwise ** would be eaten as two italics
+    html = Regex("\\*\\*([^*]+)\\*\\*").replace(html) { "<b>${it.groupValues[1]}</b>" }
+    html = Regex("\\*([^*]+)\\*").replace(html) { "<i>${it.groupValues[1]}</i>" }
+    return html
+}
 
 fun escapeHtml(text: String): String =
     text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")

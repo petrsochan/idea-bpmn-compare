@@ -73,6 +73,17 @@ extension elements), `format.js` (names and values), `export.js` (Markdown, SVG,
 
 Tests: `src/test/java/…` (JUnit) and `webview/test/` (`node:test`). Both run in `./gradlew check`.
 
+### Things that look wrong but are not
+- **The page draws its own tooltips** (`data-tip` plus the tooltips section of `main.js`), and uses no
+  `title` attribute. Inside JCEF a native tooltip is handed to the client through
+  `CefDisplayHandler#onTooltip`, which `JBCefClient` only forwards to display handlers a plugin
+  registers – so a `title` is silently swallowed and nothing is ever shown.
+- **Inactive top bar buttons use `aria-disabled`, not `disabled`.** A disabled button receives no
+  pointer events, so it could not be hovered to explain why it does nothing.
+- **`normalizeAttrs` swaps the differ's old and new values** on purpose: `bpmn-js-differ` walks from
+  the current file to the revision, so its `oldValue` is our new one. `webview/test/format.test.js`
+  pins this down.
+
 ## License
 The plugin is licensed under the [MIT License](LICENSE). The `LICENSE` file is included in the root of the plugin
 ZIP and in `META-INF` of the plugin jar.
