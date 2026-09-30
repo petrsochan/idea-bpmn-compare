@@ -90,8 +90,9 @@ button.chip:hover { border-color: var(--accent); }
   padding: 1px 8px;
   cursor: pointer;
 }
-.bar-button:hover:not(:disabled), .bar-button.active { border-color: var(--accent); }
-.bar-button:disabled { opacity: .45; cursor: default; }
+.bar-button:hover:not([aria-disabled="true"]), .bar-button.active { border-color: var(--accent); }
+/* aria-disabled rather than :disabled - a disabled button shows no tooltip in Chromium */
+.bar-button[aria-disabled="true"] { opacity: .45; cursor: default; }
 
 /* the change navigation is what pushes the trailing controls to the right edge */
 #change-nav {

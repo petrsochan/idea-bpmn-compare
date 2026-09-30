@@ -13,15 +13,17 @@
     <button type="button" class="chip changed" data-kind="changed" aria-pressed="true"><i></i>Changed <b>0</b></button>
     <button type="button" class="chip layout" data-kind="layout" aria-pressed="true"><i></i>Moved <b>0</b></button>
     <span id="summary-note"></span>
+    <!-- titles of the change-nav and zoom buttons are set from main.js: they depend on whether the
+         button is currently usable, and the wording must not be duplicated here -->
     <div id="change-nav">
-      <button id="change-prev" class="bar-button" type="button" title="Previous change (Shift+F7)">&lsaquo;</button>
-      <button id="change-next" class="bar-button" type="button" title="Next change (F7)">&rsaquo;</button>
+      <button id="change-prev" class="bar-button" type="button">&lsaquo;</button>
+      <button id="change-next" class="bar-button" type="button">&rsaquo;</button>
     </div>
     <div id="zoom">
-      <button id="zoom-out" class="bar-button" type="button" title="Zoom out">−</button>
-      <button id="zoom-reset" class="bar-button" type="button" title="Reset zoom to 100%">100%</button>
-      <button id="zoom-in" class="bar-button" type="button" title="Zoom in">+</button>
-      <button id="zoom-fit" class="bar-button" type="button" title="Fit the diagram into the window">Fit</button>
+      <button id="zoom-out" class="bar-button" type="button">−</button>
+      <button id="zoom-reset" class="bar-button" type="button">100%</button>
+      <button id="zoom-in" class="bar-button" type="button">+</button>
+      <button id="zoom-fit" class="bar-button" type="button">Fit</button>
     </div>
     <!-- title is set from main.js, so the wording lives in one place and follows the open/closed state -->
     <button id="toggle-changes" class="bar-button" type="button">Changes list</button>

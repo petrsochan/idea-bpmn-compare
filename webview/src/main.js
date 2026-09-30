@@ -89,6 +89,20 @@ function other(side) {
   return side === 'left' ? 'right' : 'left';
 }
 
+/**
+ * Greys a top-bar button out and gives it a tooltip, without the `disabled` attribute.
+ *
+ * Chromium suppresses pointer events on a disabled button, so its `title` never appears - exactly
+ * when the user most wants to know why the button does nothing. `aria-disabled` keeps it hoverable
+ * and still announces the state; the click handlers are no-ops in that state anyway.
+ */
+function setBarButtonState(id, inactive, activeTitle, inactiveTitle) {
+  const button = document.getElementById(id);
+
+  button.setAttribute('aria-disabled', String(inactive));
+  button.title = inactive ? inactiveTitle : activeTitle;
+}
+
 /** Sends a message to the IDE. The bridge is absent until the host injects it, and in a plain browser. */
 function sendToHost(message) {
   if (window.bpmnCompareHost) {
@@ -500,10 +514,10 @@ function selectElement(id) {
 }
 
 function updateChangeNav() {
-  const disabled = !navigableChanges().length;
+  const inactive = !navigableChanges().length;
 
-  document.getElementById('change-prev').disabled = disabled;
-  document.getElementById('change-next').disabled = disabled;
+  setBarButtonState('change-prev', inactive, 'Previous change (Shift+F7)', 'No change to step to');
+  setBarButtonState('change-next', inactive, 'Next change (F7)', 'No change to step to');
 }
 
 function focusElement(id) {
@@ -609,13 +623,20 @@ function currentZoom() {
   return pane ? canvasOf(pane).zoom() : null;
 }
 
+const ZOOM_TITLES = {
+  'zoom-out': 'Zoom out',
+  'zoom-in': 'Zoom in',
+  'zoom-reset': 'Reset zoom to 100%',
+  'zoom-fit': 'Fit the diagram into the window'
+};
+
 function updateZoomControls() {
   const zoom = currentZoom();
 
   document.getElementById('zoom-reset').textContent = zoom ? Math.round(zoom * 100) + '%' : '—';
 
-  for (const button of document.querySelectorAll('#zoom .bar-button')) {
-    button.disabled = !zoom;
+  for (const [ id, title ] of Object.entries(ZOOM_TITLES)) {
+    setBarButtonState(id, !zoom, title, 'No diagram loaded');
   }
 }
 
@@ -625,6 +646,7 @@ document.getElementById('zoom-reset').addEventListener('click', () => zoomTo(1))
 document.getElementById('zoom-fit').addEventListener('click', () => zoomFit());
 
 updateZoomControls();
+updateChangeNav();
 
 // ---------------------------------------------------------------------------
 // synchronization
