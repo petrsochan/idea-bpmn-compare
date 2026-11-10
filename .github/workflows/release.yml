@@ -1,0 +1,143 @@
+name: Release
+
+# Pushing a tag `vX.Y.Z` builds the plugin, checks it and publishes a GitHub Release with the ZIP,
+# release notes taken from the CHANGELOG.md section of that version and a build provenance attestation.
+#
+#   git tag v1.2.0 && git push origin v1.2.0
+#
+# The tag must match `pluginVersion` in gradle.properties and point to a commit on `main`.
+# Run it manually (workflow_dispatch) for a dry run of an existing tag: everything except the publish.
+on:
+  push:
+    tags: [ "v*" ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to dry-run (nothing is published)
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release ${{ inputs.tag || github.ref_name }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+      id-token: write # sign the attestation
+      attestations: write # store the attestation
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0 # the ancestry check below needs main's history
+          persist-credentials: false
+
+      - name: Check the tag
+        run: |
+          version=$(sed -n 's/^pluginVersion=//p' gradle.properties | tr -d '\r')
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::Tag $TAG does not match pluginVersion=$version in gradle.properties"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::Tag $TAG points to $(git rev-parse --short HEAD), which is not on main"
+            exit 1
+          fi
+          if [ "$DRY_RUN" != "true" ] && gh release view "$TAG" > /dev/null 2>&1; then
+            echo "::error::Release $TAG already exists"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: webview/package-lock.json
+
+      # read-only cache: a release reuses what the regular builds stored, but never writes its own
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: true
+
+      - name: Build, test and verify the plugin
+        run: ./gradlew buildPlugin check verifyPluginStructure verifyPlugin
+
+      - name: Audit bundled npm dependencies
+        working-directory: webview
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Prepare release notes
+        run: |
+          zip="build/distributions/idea-bpmn-compare-$VERSION.zip"
+          test -f "$zip" || { echo "::error::$zip was not built"; exit 1; }
+          echo "ZIP=$zip" >> "$GITHUB_ENV"
+
+          awk -v heading="## [$VERSION]" '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > build/release-notes.md
+          if ! grep -q '[^[:space:]]' build/release-notes.md; then
+            echo "::error::CHANGELOG.md has no entries under ## [$VERSION]"
+            exit 1
+          fi
+
+          sum=$(sha256sum "$zip" | cut -d' ' -f1)
+          cat >> build/release-notes.md <<EOF
+
+          ### Installation
+          Download \`idea-bpmn-compare-$VERSION.zip\` below and install it in IntelliJ IDEA via
+          **Settings | Plugins | ⚙ | Install Plugin from Disk…**.
+
+          SHA-256: \`$sum\`
+          EOF
+          cat build/release-notes.md
+
+      - name: Attest build provenance
+        if: env.DRY_RUN != 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ env.ZIP }}
+
+      - name: Publish the release
+        if: env.DRY_RUN != 'true'
+        run: |
+          gh release create "$TAG" "$ZIP" \
+            --verify-tag \
+            --title "$VERSION" \
+            --notes-file build/release-notes.md \
+            --latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload the dry-run result
+        if: env.DRY_RUN == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-dry-run-${{ env.TAG }}
+          path: |
+            ${{ env.ZIP }}
+            build/release-notes.md
+          if-no-files-found: error
