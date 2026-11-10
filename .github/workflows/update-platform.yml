@@ -1,0 +1,74 @@
+name: Update IntelliJ Platform
+
+# Dependabot cannot read `platformVersion` in gradle.properties, so this checks the latest IntelliJ
+# IDEA release weekly and opens a PR bumping it. Such a PR is never merged automatically.
+#
+# A PR opened with GITHUB_TOKEN does not trigger `pull_request` workflows, so the build is started
+# explicitly through workflow_dispatch (which GITHUB_TOKEN may trigger) and reports on the PR commit.
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Bump platformVersion
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the update branch
+      pull-requests: write # open the PR
+      actions: write # dispatch the build on the branch
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Find the latest IntelliJ IDEA release
+        id: version
+        run: |
+          current=$(sed -n 's/^platformVersion=//p' gradle.properties)
+          latest=$(curl -fsSL 'https://data.services.jetbrains.com/products/releases?code=IIU&latest=true&type=release' \
+            | jq -r '.IIU[0].version')
+          if [[ ! "$latest" =~ ^[0-9]{4}\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "::error::Unexpected version from the JetBrains API: '$latest'"
+            exit 1
+          fi
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          # newer = sorts after the current one and differs from it
+          if [ "$latest" != "$current" ] && \
+             [ "$(printf '%s\n%s\n' "$current" "$latest" | sort -V | tail -n1)" = "$latest" ]; then
+            echo "newer=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "current=$current latest=$latest"
+
+      - name: Open a PR
+        if: steps.version.outputs.newer == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURRENT: ${{ steps.version.outputs.current }}
+          LATEST: ${{ steps.version.outputs.latest }}
+        run: |
+          branch="update-platform/$LATEST"
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "Branch $branch already exists - the PR is open or was closed on purpose."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          sed -i "s/^platformVersion=.*/platformVersion=$LATEST/" gradle.properties
+          git commit -am "Build against IntelliJ IDEA $LATEST"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "Build against IntelliJ IDEA $LATEST" \
+            --body "IntelliJ IDEA $LATEST is out; this moves \`platformVersion\` from $CURRENT to $LATEST.
+
+          Check the Plugin Verifier report of the build, try the plugin in \`./gradlew runIde\`, and decide whether \`pluginSinceBuild\` should move too. Opened by \`update-platform.yml\`."
+          gh workflow run build.yml --ref "$branch"
