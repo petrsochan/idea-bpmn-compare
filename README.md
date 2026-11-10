@@ -51,6 +51,21 @@ localIdePath=C:/Program Files/JetBrains/IntelliJ IDEA 2026.2
 Every push to `main` and every pull request is built by GitHub Actions (`.github/workflows/build.yml`);
 the plugin ZIP is attached to the workflow run as an artifact.
 
+### Security and dependency automation
+- **Build** (`build.yml`) also runs weekly and audits the bundled npm dependencies (`npm audit --omit=dev`).
+- **Dependabot** (`.github/dependabot.yml`) – weekly updates of npm, Gradle (incl. the wrapper) and actions;
+  security updates come immediately. Patch/minor updates are merged automatically once the checks pass
+  (`dependabot-automerge.yml`) – except `bpmn-js` and `bpmn-js-differ`, which always wait for a manual review.
+- **IntelliJ Platform** (`update-platform.yml`) – Dependabot cannot read `platformVersion`, so a weekly job
+  opens a PR when a newer IntelliJ IDEA is released. Never merged automatically.
+- **Dependency review** (`dependency-review.yml`) – fails a PR that brings in a dependency with a known
+  high/critical vulnerability.
+- **CodeQL** (default setup in the repository settings) – Java, JavaScript and the workflows themselves.
+- **OpenSSF Scorecard** (`scorecard.yml`) – weekly supply-chain audit, results in *Security › Code scanning*.
+- **Ruleset on `main`** – *Build plugin*, *Dependency review* and CodeQL must pass; repository admins may bypass
+  it, so direct pushes to `main` still work.
+- Actions are pinned to commit SHAs (Dependabot updates them); the Gradle distribution is pinned by checksum.
+
 Target: IntelliJ IDEA 2026.2+ (build 262) – in this version JCEF and DVCS are separate platform modules.
 Those IDEs run on JBR 21, so the plugin is compiled to Java 21 bytecode. Earlier IDEs are not supported;
 compatibility is checked by the IntelliJ Plugin Verifier (`./gradlew verifyPlugin`) as part of the build.

@@ -1,0 +1,52 @@
+# Weekly version updates. Security updates (a vulnerable dependency) come straight away,
+# independent of this schedule, because "Dependabot security updates" is enabled for the repository.
+#
+# Not covered here: `platformVersion` in gradle.properties (the IntelliJ IDEA the plugin is built
+# against) - Dependabot cannot read it, see .github/workflows/update-platform.yml.
+version: 2
+
+updates:
+  # bpmn.io (bundled into the plugin) and esbuild
+  - package-ecosystem: npm
+    directory: /webview
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(webview)"
+    groups:
+      # bpmn-js and the differ change what the diff view shows, so they always come as their own PR
+      # and are never merged automatically (see dependabot-automerge.yml)
+      bpmn-io:
+        patterns: [ "bpmn-js", "bpmn-js-differ" ]
+      build-tools:
+        patterns: [ "*" ]
+        exclude-patterns: [ "bpmn-js", "bpmn-js-differ" ]
+        update-types: [ minor, patch ]
+
+  # IntelliJ Platform Gradle plugin, JUnit and the Gradle wrapper
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(gradle)"
+    groups:
+      gradle-minor:
+        patterns: [ "*" ]
+        update-types: [ minor, patch ]
+
+  # actions used by the workflows (pinned to commit SHAs, Dependabot keeps the SHA and the comment in sync)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: [ "*" ]
