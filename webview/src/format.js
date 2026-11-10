@@ -3,20 +3,6 @@
  * so everything in this file is unit-tested in ../test/format.test.js.
  */
 
-/**
- * bpmn-js-differ reports property values from the perspective of its internal model walk, which ends up
- * with oldValue taken from the second (new) definitions - swap them so old = revision, new = current.
- */
-export function normalizeAttrs(attrs) {
-  const result = {};
-
-  for (const [ name, { oldValue, newValue } ] of Object.entries(attrs || {})) {
-    result[name] = { oldValue: newValue, newValue: oldValue };
-  }
-
-  return result;
-}
-
 export function displayName(change) {
   const model = change.model || {};
 
