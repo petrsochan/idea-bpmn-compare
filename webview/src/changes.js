@@ -1,5 +1,5 @@
 import { compareExtensions } from './extensions.js';
-import { displayName, normalizeAttrs } from './format.js';
+import { displayName } from './format.js';
 
 /**
  * Change kinds in the order the filter chips use; also the sort order of the change list.
@@ -46,7 +46,8 @@ export function toChangeList(changes, newElements = {}, oldElements = {}) {
   for (const [ id, change ] of Object.entries(changes._changed || {})) {
     const e = entry(id, change.model);
     e.kinds.add('changed');
-    e.attrs = normalizeAttrs(change.attrs);
+    // bpmn-js-differ 4+ reports oldValue from the revision and newValue from the current file, as diff(old, new)
+    e.attrs = { ...change.attrs };
   }
 
   for (const [ id, model ] of Object.entries(changes._layoutChanged || {})) {
@@ -90,7 +91,7 @@ function addExtensionChanges(byId, entry, newElements, oldElements) {
 
     const e = entry(id, newElement);
     e.kinds.add('changed');
-    // these are already oriented old = revision, new = current, so they bypass normalizeAttrs
+    // oriented like the differ's attributes: old = revision, new = current
     e.attrs = Object.assign(e.attrs || {}, extensionAttrs);
   }
 }

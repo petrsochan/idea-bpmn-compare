@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { describeAttrs, displayName, formatValue, normalizeAttrs, typeName } from '../src/format.js';
+import { describeAttrs, displayName, formatValue, typeName } from '../src/format.js';
 
 test('typeName strips only the bpmn namespace prefix', () => {
   assert.equal(typeName({ model: { $type: 'bpmn:ServiceTask' } }), 'ServiceTask');
@@ -45,15 +45,6 @@ test('formatValue truncates a very long value', () => {
 
   assert.ok(formatted.length < 130, 'was ' + formatted.length + ' chars');
   assert.ok(formatted.endsWith('...\"'), formatted.slice(-10));
-});
-
-test('normalizeAttrs swaps the differ values so old is the revision and new is the current file', () => {
-  // bpmn-js-differ walks from the current file to the revision, so its oldValue is our newValue
-  assert.deepEqual(
-    normalizeAttrs({ name: { oldValue: 'from current', newValue: 'from revision' } }),
-    { name: { oldValue: 'from revision', newValue: 'from current' } });
-
-  assert.deepEqual(normalizeAttrs(null), {});
 });
 
 test('describeAttrs renders one old to new line per attribute', () => {

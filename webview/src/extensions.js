@@ -7,9 +7,8 @@
  * { oldValue, newValue } shape as the differ's attribute changes, keyed by extension type, so the
  * existing change list, badges and tooltips render it without any special case.
  *
- * Unlike the differ's own attributes, these values are already in our orientation:
- * oldValue comes from the revision, newValue from the current file, so they must NOT be passed
- * through normalizeAttrs.
+ * The orientation matches the differ's attributes too: oldValue comes from the revision, newValue
+ * from the current file.
  */
 
 /** Rendered per extension type, or undefined when that type is absent on a side. */

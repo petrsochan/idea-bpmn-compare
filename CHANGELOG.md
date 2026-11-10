@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- An attribute that was added or removed is shown the right way round in the badge tooltip, the change list and the Markdown export. An added attribute appeared as if it had been removed (`"New" → ∅`), and a removed one as changed to `"0"`; now they read `∅ → "New"` and `"Old" → ∅`. The fix comes with `bpmn-js-differ` 4.0, which reports old and new values correctly, so the plugin no longer swaps them itself.
+
 ## [1.1.0]
 
 ### Added

@@ -19,10 +19,10 @@ test('flattens the differ buckets into one list', () => {
   assert.equal(changes[0].attrs, null, 'an added element has no attribute changes');
 });
 
-test('a changed element carries its attributes with old and new swapped', () => {
+test('a changed element carries its attributes as the differ reports them', () => {
   const changes = toChangeList({
     ...empty,
-    _changed: { Task_1: { model: task, attrs: { name: { oldValue: 'current', newValue: 'revision' } } } }
+    _changed: { Task_1: { model: task, attrs: { name: { oldValue: 'revision', newValue: 'current' } } } }
   });
 
   assert.equal(changes.length, 1);
@@ -86,7 +86,7 @@ test('extension differences are merged into an element the differ already report
   const changes = toChangeList(
     {
       ...empty,
-      _changed: { Task_1: { model: withListener('new'), attrs: { name: { oldValue: 'current', newValue: 'revision' } } } }
+      _changed: { Task_1: { model: withListener('new'), attrs: { name: { oldValue: 'revision', newValue: 'current' } } } }
     },
     { Task_1: withListener('new') },
     { Task_1: withListener('old') });

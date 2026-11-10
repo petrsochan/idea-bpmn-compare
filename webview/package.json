@@ -10,10 +10,11 @@
     "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
-    "bpmn-js": "^18.29.1",
-    "bpmn-js-differ": "^3.2.0"
+    "bpmn-js": "^18.31.1",
+    "bpmn-js-differ": "^4.0.0"
   },
   "devDependencies": {
+    "bpmn-moddle": "^10.3.1",
     "esbuild": "^0.28.2"
   }
 }
