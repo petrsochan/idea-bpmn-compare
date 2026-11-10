@@ -66,6 +66,20 @@ the plugin ZIP is attached to the workflow run as an artifact.
   it, so direct pushes to `main` still work.
 - Actions are pinned to commit SHAs (Dependabot updates them); the Gradle distribution is pinned by checksum.
 
+### Releasing
+1. Move the `[Unreleased]` entries in `CHANGELOG.md` under `## [X.Y.Z]` and set `pluginVersion=X.Y.Z`
+   in `gradle.properties`; merge that to `main`.
+2. Tag the release commit and push the tag:
+   ```
+   git tag vX.Y.Z && git push origin vX.Y.Z
+   ```
+3. `release.yml` checks that the tag matches `pluginVersion` and is on `main`, builds and verifies the plugin,
+   and publishes a GitHub Release with the ZIP, the changelog section as notes, its SHA-256 and a build
+   provenance attestation (`gh attestation verify <zip> --repo petrsochan/idea-bpmn-compare`).
+
+Running *Release* manually (*Actions › Release › Run workflow*) with an existing tag is a dry run: it does
+everything except publishing and attaches the ZIP and the notes to the run.
+
 Target: IntelliJ IDEA 2026.2+ (build 262) – in this version JCEF and DVCS are separate platform modules.
 Those IDEs run on JBR 21, so the plugin is compiled to Java 21 bytecode. Earlier IDEs are not supported;
 compatibility is checked by the IntelliJ Plugin Verifier (`./gradlew verifyPlugin`) as part of the build.
