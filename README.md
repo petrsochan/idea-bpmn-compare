@@ -77,7 +77,9 @@ the plugin ZIP is attached to the workflow run as an artifact.
    ```
 3. `release.yml` checks that the tag matches `pluginVersion` and is on `main`, builds and verifies the plugin,
    and publishes a GitHub Release with the ZIP, the changelog section as notes, its SHA-256 and a build
-   provenance attestation (`gh attestation verify <zip> --repo petrsochan/idea-bpmn-compare`).
+   provenance attestation, attached as `<zip>.intoto.jsonl` too. Verify a downloaded ZIP with
+   `gh attestation verify <zip> --repo petrsochan/idea-bpmn-compare` (add `--bundle <zip>.intoto.jsonl`
+   to verify against the attached file instead of the GitHub API).
 
 Running *Release* manually (*Actions › Release › Run workflow*) with an existing tag is a dry run: it does
 everything except publishing and attaches the ZIP and the notes to the run.
