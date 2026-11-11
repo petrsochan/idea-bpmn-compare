@@ -80,6 +80,11 @@ the plugin ZIP is attached to the workflow run as an artifact.
    provenance attestation, attached as `<zip>.intoto.jsonl` too. Verify a downloaded ZIP with
    `gh attestation verify <zip> --repo petrsochan/idea-bpmn-compare` (add `--bundle <zip>.intoto.jsonl`
    to verify against the attached file instead of the GitHub API).
+4. The *Publish to JetBrains Marketplace* job then waits for your approval (*Actions › the run › Review
+   deployments*). Once approved it verifies the attestation of the released ZIP and uploads that exact file to
+   [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/34425-bpmn-compare), where it goes through
+   JetBrains' review. The upload token is the `PUBLISH_TOKEN` secret of the `marketplace` environment
+   (a permanent token from plugins.jetbrains.com › *My Tokens*), usable only from `v*` tags.
 
 Running *Release* manually (*Actions › Release › Run workflow*) with an existing tag is a dry run: it does
 everything except publishing and attaches the ZIP and the notes to the run.

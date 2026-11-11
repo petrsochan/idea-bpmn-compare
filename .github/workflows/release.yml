@@ -6,6 +6,7 @@ name: Release
 #   git tag v1.2.0 && git push origin v1.2.0
 #
 # The tag must match `pluginVersion` in gradle.properties and point to a commit on `main`.
+# After the GitHub Release, the same ZIP goes to JetBrains Marketplace once approved (job `marketplace`).
 # Run it manually (workflow_dispatch) for a dry run of an existing tag: everything except the publish.
 on:
   push:
@@ -151,3 +152,49 @@ jobs:
             ${{ env.ZIP }}
             build/release-notes.md
           if-no-files-found: error
+
+  # Uploads the exact ZIP of the GitHub Release (no rebuild) to JetBrains Marketplace, after the
+  # provenance attestation proves it was built by this workflow. Publishing cannot be undone, so the
+  # `marketplace` environment requires an approval in the Actions UI; PUBLISH_TOKEN (a Marketplace
+  # permanent token, plugins.jetbrains.com > My Tokens) is a secret of that environment only.
+  marketplace:
+    name: Publish to JetBrains Marketplace
+    needs: release
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: marketplace
+      url: https://plugins.jetbrains.com/plugin/34425-bpmn-compare
+    permissions:
+      contents: read # download the release asset
+      attestations: read # verify its attestation
+    env:
+      TAG: ${{ github.ref_name }}
+
+    steps:
+      - name: Download the released ZIP
+        run: |
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'idea-bpmn-compare-*.zip'
+          zip=$(ls idea-bpmn-compare-*.zip)
+          test "$zip" = "idea-bpmn-compare-${TAG#v}.zip" || { echo "::error::Unexpected asset $zip"; exit 1; }
+          echo "ZIP=$zip" >> "$GITHUB_ENV"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Verify the provenance attestation
+        run: |
+          gh attestation verify "$ZIP" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-ref "refs/tags/$TAG"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload to JetBrains Marketplace
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --header "Authorization: Bearer $PUBLISH_TOKEN" \
+            --form xmlId=com.github.bpmncompare \
+            --form "file=@$ZIP" \
+            https://plugins.jetbrains.com/plugin/uploadPlugin
+        env:
+          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
