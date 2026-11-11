@@ -1,6 +1,8 @@
 # BPMN Compare – IntelliJ IDEA plugin
 
 [![Build](https://github.com/petrsochan/idea-bpmn-compare/actions/workflows/build.yml/badge.svg)](https://github.com/petrsochan/idea-bpmn-compare/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/petrsochan/idea-bpmn-compare)](https://github.com/petrsochan/idea-bpmn-compare/releases/latest)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/petrsochan/idea-bpmn-compare/badge)](https://securityscorecards.dev/viewer/?uri=github.com/petrsochan/idea-bpmn-compare)
 
 Visual comparison of BPMN diagrams with any Git revision, powered by [bpmn.io](https://bpmn.io)
 (`bpmn-js` for rendering, `bpmn-js-differ` for computing the differences).
