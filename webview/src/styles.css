@@ -268,6 +268,9 @@ button.chip:hover { border-color: var(--accent); }
 .diff-badge.changed { background: var(--changed); }
 .diff-badge.layout { background: var(--layout); }
 
+/* count of changes hidden inside a collapsed subprocess: neutral, the kinds are on the plane itself */
+.diff-badge.nested { background: var(--fg); color: var(--bg); box-shadow: 0 0 0 1.5px var(--bg); }
+
 /* ---- export menu ---- */
 
 #export-wrap { position: relative; }

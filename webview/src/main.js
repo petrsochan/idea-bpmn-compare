@@ -5,6 +5,7 @@ import { getBBox } from 'diagram-js/lib/util/Elements';
 import { KINDS, toChangeList } from './changes.js';
 import { changesToMarkdown, svgToPng, viewerToSvg } from './export.js';
 import { describeAttrs, displayName, typeName } from './format.js';
+import { hiddenChangeCounts } from './planes.js';
 
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-js.css';
@@ -414,6 +415,10 @@ function decorate(changeList) {
       }
     }
   }
+
+  for (const pane of Object.values(panes)) {
+    addHiddenChangeBadges(pane, changeList);
+  }
 }
 
 function addBadge(pane, change, kind) {
@@ -439,6 +444,76 @@ function addBadge(pane, change, kind) {
   } catch (err) {
 
     // some elements (e.g. the root) cannot carry overlays
+  }
+}
+
+// ---------------------------------------------------------------------------
+// planes (collapsed subprocesses)
+// ---------------------------------------------------------------------------
+
+/** Id of the plane an element is drawn on, or undefined if the pane does not have it. */
+function rootIdOf(pane, id) {
+  const element = pane.viewer.get('elementRegistry').get(id);
+  const root = element && canvasOf(pane).findRoot(element);
+
+  return root ? root.id : undefined;
+}
+
+/**
+ * Id of the collapsed subprocess shape that opens a plane, or undefined for a top-level plane.
+ *
+ * The plane of subprocess `Sub_1` is the root `Sub_1_plane` sharing its business object, so the
+ * shape is the registry entry under the business object's id - for a process plane that entry is
+ * the root itself.
+ */
+function shapeIdOfRoot(pane, rootId) {
+  const registry = pane.viewer.get('elementRegistry');
+  const root = registry.get(rootId);
+  const shape = root && root.businessObject && registry.get(root.businessObject.id);
+
+  return shape && shape !== root ? shape.id : undefined;
+}
+
+/** Switches the pane to the plane the element is drawn on; nothing happens if it is already shown. */
+function showPlaneOf(pane, element) {
+  const canvas = canvasOf(pane);
+  const root = canvas.findRoot(element);
+
+  if (root) {
+    canvas.setRootElement(root);
+  }
+}
+
+/** A count on each collapsed subprocess that hides visible changes of this pane. */
+function addHiddenChangeBadges(pane, changeList) {
+  if (!pane.loaded) {
+    return;
+  }
+
+  const ids = changeList
+    .filter((change) => {
+      const kind = visibleKind(change);
+
+      return kind && sidesFor(kind).includes(pane.side);
+    })
+    .map((change) => change.id);
+
+  const counts = hiddenChangeCounts(ids, (id) => rootIdOf(pane, id), (rootId) => shapeIdOfRoot(pane, rootId));
+
+  for (const [ shapeId, count ] of counts) {
+    const badge = document.createElement('span');
+    badge.className = 'diff-badge nested';
+    badge.textContent = String(count);
+    setTip(badge, (count === 1 ? '1 change' : count + ' changes') + ' inside this subprocess'
+      + '\n\nOpen it with the drill-down button, or step to it with F7.');
+
+    try {
+      // bottom right: the top right carries the subprocess's own badge, the bottom left the drill-down button
+      pane.viewer.get('overlays').add(shapeId, 'diff', { position: { bottom: 10, right: 8 }, html: badge });
+    } catch (err) {
+
+      // the shape cannot carry an overlay
+    }
   }
 }
 
