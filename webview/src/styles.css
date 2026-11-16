@@ -230,6 +230,13 @@ button.chip:hover { border-color: var(--accent); }
 
 /* ---- diagram markers ---- */
 
+/* collapsed subprocess with changes inside: dashed, so it does not read as a change of the subprocess
+   itself - and listed first, so a change of the subprocess itself wins */
+.djs-shape.diff-nested-added .djs-visual > :nth-child(1) { stroke: var(--added) !important; stroke-width: 2.5px !important; stroke-dasharray: 6 4; }
+.djs-shape.diff-nested-removed .djs-visual > :nth-child(1) { stroke: var(--removed) !important; stroke-width: 2.5px !important; stroke-dasharray: 6 4; }
+.djs-shape.diff-nested-changed .djs-visual > :nth-child(1) { stroke: var(--changed) !important; stroke-width: 2.5px !important; stroke-dasharray: 6 4; }
+.djs-shape.diff-nested-layout .djs-visual > :nth-child(1) { stroke: var(--layout) !important; stroke-width: 2.5px !important; stroke-dasharray: 6 4; }
+
 .djs-shape.diff-layout .djs-visual > :nth-child(1) { stroke: var(--layout) !important; stroke-dasharray: 5 3; }
 .djs-connection.diff-layout .djs-visual > path { stroke: var(--layout) !important; stroke-dasharray: 5 3; }
 
@@ -267,9 +274,6 @@ button.chip:hover { border-color: var(--accent); }
 .diff-badge.removed { background: var(--removed); }
 .diff-badge.changed { background: var(--changed); }
 .diff-badge.layout { background: var(--layout); }
-
-/* count of changes hidden inside a collapsed subprocess: neutral, the kinds are on the plane itself */
-.diff-badge.nested { background: var(--fg); color: var(--bg); box-shadow: 0 0 0 1.5px var(--bg); }
 
 /* ---- export menu ---- */
 

@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
-- A collapsed subprocess shows how many changes it hides, and while synchronized both diagrams drill in and out of subprocesses together.
+- A collapsed subprocess with changes inside is marked with a dashed outline and a badge counting them, coloured by the most important kind of change inside, and while synchronized both diagrams drill in and out of subprocesses together.
 
 ### Fixed
 - Changes inside collapsed subprocesses can be reached. F7 and the change list open the subprocess and centre the element instead of scrolling the top-level diagram to an empty spot, and editing the XML no longer throws you out of the subprocess you are looking at.

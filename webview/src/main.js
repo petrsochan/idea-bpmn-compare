@@ -5,7 +5,7 @@ import { getBBox } from 'diagram-js/lib/util/Elements';
 import { KINDS, toChangeList } from './changes.js';
 import { changesToMarkdown, svgToPng, viewerToSvg } from './export.js';
 import { describeAttrs, displayName, typeName } from './format.js';
-import { hiddenChangeCounts } from './planes.js';
+import { hiddenChanges, leadingKind } from './planes.js';
 
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-js.css';
@@ -391,8 +391,10 @@ function clearDecorations() {
 
     pane.viewer.get('elementRegistry').forEach((element) => {
       for (const kind of KINDS) {
-        if (canvas.hasMarker(element, 'diff-' + kind)) {
-          canvas.removeMarker(element, 'diff-' + kind);
+        for (const marker of [ 'diff-' + kind, 'diff-nested-' + kind ]) {
+          if (canvas.hasMarker(element, marker)) {
+            canvas.removeMarker(element, marker);
+          }
         }
       }
     });
@@ -438,7 +440,7 @@ function decorate(changeList) {
   }
 
   for (const pane of Object.values(panes)) {
-    addHiddenChangeBadges(pane, changeList);
+    markHiddenChanges(pane, changeList);
   }
 }
 
@@ -505,28 +507,40 @@ function showPlaneOf(pane, element) {
   }
 }
 
-/** A count on each collapsed subprocess that hides visible changes of this pane. */
-function addHiddenChangeBadges(pane, changeList) {
+/**
+ * Marks each collapsed subprocess that hides visible changes of this pane: a dashed outline and a
+ * count, both in the colour of the most important kind inside. Dashed, so it does not read as a
+ * change of the subprocess itself.
+ */
+function markHiddenChanges(pane, changeList) {
   if (!pane.loaded) {
     return;
   }
 
-  const ids = changeList
-    .filter((change) => {
-      const kind = visibleKind(change);
+  const drawn = [];
 
-      return kind && sidesFor(kind).includes(pane.side);
-    })
-    .map((change) => change.id);
+  for (const change of changeList) {
+    const kind = visibleKind(change);
 
-  const counts = hiddenChangeCounts(ids, (id) => rootIdOf(pane, id), (rootId) => shapeIdOfRoot(pane, rootId));
+    if (kind && sidesFor(kind).includes(pane.side)) {
+      drawn.push({ id: change.id, kind });
+    }
+  }
 
-  for (const [ shapeId, count ] of counts) {
+  const hidden = hiddenChanges(drawn, (id) => rootIdOf(pane, id), (rootId) => shapeIdOfRoot(pane, rootId));
+
+  for (const [ shapeId, byKind ] of hidden) {
+    const kind = leadingKind(byKind);
+    const count = [ ...byKind.values() ].reduce((sum, n) => sum + n, 0);
+    const breakdown = KINDS.filter((k) => byKind.has(k)).map((k) => byKind.get(k) + ' ' + KIND_LABEL[k].toLowerCase());
+
+    canvasOf(pane).addMarker(shapeId, 'diff-nested-' + kind);
+
     const badge = document.createElement('span');
-    badge.className = 'diff-badge nested';
+    badge.className = 'diff-badge nested ' + kind;
     badge.textContent = String(count);
-    setTip(badge, (count === 1 ? '1 change' : count + ' changes') + ' inside this subprocess'
-      + '\n\nOpen it with the drill-down button, or step to it with F7.');
+    setTip(badge, (count === 1 ? '1 change' : count + ' changes') + ' inside this subprocess: '
+      + breakdown.join(', ') + '\n\nOpen it with the drill-down button, or step to it with F7.');
 
     try {
       // bottom left: the top right carries the subprocess's own badge, the bottom right the drill-down button
