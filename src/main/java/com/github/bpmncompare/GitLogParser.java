@@ -43,18 +43,46 @@ final class GitLogParser {
     }
 
     /**
-     * Paths a file had before, newest first, without the current one.
+     * Paths a file had before it was renamed, newest first, without the current one.
      *
-     * @param lines output of {@code git log --follow --name-only --format= -z -- <path>}; NUL- or
-     *              newline-separated, blank entries are skipped
+     * <p>Walks the status records git prints newest commit first: {@code R<score>} (old path, new
+     * path) adds the old path, {@code C<score>} or {@code A} ends the walk because the file started
+     * there - as a copy of another file that still exists, or as a new file. A copy is therefore not
+     * mistaken for a rename: its source is not an earlier name of the file.
+     *
+     * @param lines output of {@code git log --follow --name-status --format= -z -- <path>}; the
+     *              records are NUL- (or newline-) separated, a truncated last record is ignored
      */
     static List<String> historicalPaths(List<String> lines, String currentPath) {
-        LinkedHashSet<String> paths = new LinkedHashSet<>();
+        List<String> tokens = new ArrayList<>();
         for (String line : lines) {
-            for (String path : line.split("[\\x00\\n]")) {
-                if (!path.isBlank() && !path.equals(currentPath)) {
-                    paths.add(path);
+            for (String token : line.split("[\\x00\\n]")) {
+                if (!token.isEmpty()) {
+                    tokens.add(token);
                 }
+            }
+        }
+        LinkedHashSet<String> paths = new LinkedHashSet<>();
+        int i = 0;
+        while (i < tokens.size()) {
+            String status = tokens.get(i++);
+            char kind = status.charAt(0);
+            if (kind == 'R' || kind == 'C') {
+                if (i + 1 >= tokens.size()) {
+                    break; // truncated record
+                }
+                String oldPath = tokens.get(i);
+                i += 2;
+                if (kind == 'C') {
+                    break;
+                }
+                if (!oldPath.equals(currentPath)) {
+                    paths.add(oldPath);
+                }
+            } else if (kind == 'A') {
+                break;
+            } else {
+                i++; // M, D, T, ...: one path
             }
         }
         return List.copyOf(paths);

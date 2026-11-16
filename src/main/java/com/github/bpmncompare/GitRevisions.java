@@ -137,12 +137,15 @@ final class GitRevisions {
         }
     }
 
-    /** Earlier paths of the file, newest first; empty when it was never renamed or git fails. */
+    /**
+     * Earlier names of the file, newest first; empty when it was never renamed (a copy does not count)
+     * or git fails.
+     */
     private static List<String> historicalPaths(Project project, GitRepository repository, VirtualFile file, String currentPath) {
         GitLineHandler handler = new GitLineHandler(project, repository.getRoot(), GitCommand.LOG);
         handler.setSilent(true);
-        // -z: no quoting of non-ASCII names, see GitLogParser#historicalPaths
-        handler.addParameters("--follow", "--name-only", "--format=", "-z");
+        // --name-status tells a rename from a copy; -z: no quoting of non-ASCII names, see GitLogParser#historicalPaths
+        handler.addParameters("--follow", "--name-status", "--format=", "-z");
         handler.endOptions();
         handler.addRelativeFiles(List.of(file));
         GitCommandResult result = Git.getInstance().runCommand(handler);
