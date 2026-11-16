@@ -774,8 +774,9 @@ function loadedPanes() {
 }
 
 /**
- * Runs a zoom action on the diagrams. With sync on, zooming one side is enough - the other follows,
- * so both keep showing the same region; with sync off each side zooms around its own centre.
+ * Runs a zoom action on the diagrams. With sync on and both sides on the same plane, zooming one side
+ * is enough - the other follows, so both keep showing the same region; otherwise each side zooms
+ * around its own centre.
  */
 function applyZoom(action) {
   const loaded = loadedPanes();
@@ -784,13 +785,14 @@ function applyZoom(action) {
     return;
   }
 
-  const targets = syncEnabled ? loaded.slice(0, 1) : loaded;
+  const together = syncEnabled && loaded.length === 2 && onSamePlane(loaded[0], loaded[1]);
+  const targets = together ? loaded.slice(0, 1) : loaded;
 
   for (const pane of targets) {
     action(canvasOf(pane));
   }
 
-  if (syncEnabled) {
+  if (together) {
     copyViewbox(targets[0], panes[other(targets[0].side)]);
   }
 
@@ -899,8 +901,8 @@ function copyViewbox(fromPane, toPane) {
  * Shows the plane `rootId` on the other side too. A subprocess that exists on one side only leaves
  * the other side where it is - there is nothing to show.
  *
- * The viewbox follows by itself: the plane switch scrolls the source pane, which schedules the
- * usual viewbox sync for the next frame.
+ * The viewbox is copied right away: bpmn-js has already moved the source pane to its position on
+ * the new plane, and does not always scroll it, so the usual scroll-driven sync cannot be relied on.
  */
 function syncPlane(fromSide, rootId) {
   const toPane = panes[other(fromSide)];
@@ -921,6 +923,7 @@ function syncPlane(fromSide, rootId) {
 
   try {
     canvasOf(toPane).setRootElement(root);
+    copyViewbox(panes[fromSide], toPane);
   } finally {
     applyingSync = wasApplying;
   }

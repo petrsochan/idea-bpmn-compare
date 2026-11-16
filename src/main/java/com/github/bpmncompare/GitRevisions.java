@@ -81,7 +81,13 @@ final class GitRevisions {
         // --follow: commits from before a rename or move are listed too
         handler.addParameters("--follow", "--max-count=" + MAX_COMMITS, "--date=short", GitLogParser.FORMAT);
         handler.endOptions();
-        handler.addRelativeFiles(List.of(file));
+        // a rename that is not committed yet: the commits know the file only under its earlier name
+        String beforeMove = pendingMoveSource(project, repository, file);
+        if (beforeMove != null) {
+            handler.addParameters(beforeMove); // relative to the repository root, the handler's working directory
+        } else {
+            handler.addRelativeFiles(List.of(file));
+        }
 
         GitCommandResult result = Git.getInstance().runCommand(handler);
         result.throwOnError();

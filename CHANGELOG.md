@@ -5,9 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- A collapsed subprocess shows how many changes it hides, and while synchronized both diagrams drill in and out of subprocesses together.
+
 ### Fixed
-- Changes inside collapsed subprocesses can be found. A collapsed subprocess shows how many changes it hides, F7 and the change list open the subprocess and centre the element instead of scrolling the top-level diagram to an empty spot, both diagrams drill in and out together while synchronized, and editing the XML no longer throws you out of the subprocess you are looking at.
-- A renamed or moved diagram keeps its history. The revision chooser lists the commits from before the rename, and an older revision is read under the name the file had then, instead of the file being reported as missing and every element as added. The rename is followed before it is committed too, so renaming or moving the file in the IDE and comparing with HEAD still shows what changed. The label of such a revision says which name was used. A diagram copied from another one is still shown as new, not compared with the file it was copied from.
+- Changes inside collapsed subprocesses can be reached. F7 and the change list open the subprocess and centre the element instead of scrolling the top-level diagram to an empty spot, and editing the XML no longer throws you out of the subprocess you are looking at.
+- A renamed or moved diagram keeps its history. The revision chooser lists the commits from before the rename, and an older revision is read under the name the file had then, instead of the file being reported as missing and every element as added. The rename is followed before it is committed too, so renaming or moving the file in the IDE and comparing with HEAD or picking an older commit still shows what changed. The label of such a revision says which name was used. A diagram copied from another one is still shown as new, not compared with the file it was copied from.
 
 ## [1.1.1]
 
