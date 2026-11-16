@@ -1,7 +1,11 @@
 package com.github.bpmncompare;
 
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.VcsException;
+import com.intellij.openapi.vcs.changes.Change;
+import com.intellij.openapi.vcs.changes.ChangeListManager;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import git4idea.GitLocalBranch;
@@ -96,9 +100,11 @@ final class GitRevisions {
     /**
      * Content of {@code file} at {@code revision}.
      *
-     * <p>If the file is not at its current path in that revision, the paths it had before - from the
-     * history of the current branch - are tried, so a renamed or moved diagram is still compared
-     * with its own past instead of being shown as entirely new.
+     * <p>If the file is not at its current path in that revision, the paths it had before are tried,
+     * so a renamed or moved diagram is still compared with its own past instead of being shown as
+     * entirely new: first the name it had before a rename that is not committed yet, then the earlier
+     * names from the history of the current branch. A diagram copied from another one is not
+     * followed back to its source.
      *
      * @throws MissingInRevisionException if the file exists in that revision under none of its names
      */
@@ -113,7 +119,7 @@ final class GitRevisions {
         try {
             return new RevisionContent(read(project, repository, revision, relativePath), null);
         } catch (MissingInRevisionException missing) {
-            for (String path : historicalPaths(project, repository, file, relativePath)) {
+            for (String path : earlierPaths(project, repository, file, relativePath)) {
                 try {
                     return new RevisionContent(read(project, repository, revision, path), path);
                 } catch (MissingInRevisionException notUnderThisName) {
@@ -122,6 +128,36 @@ final class GitRevisions {
             }
             throw missing;
         }
+    }
+
+    /** Candidate earlier paths, most likely first: the pending move's before-path, then the committed history. */
+    private static List<String> earlierPaths(Project project, GitRepository repository, VirtualFile file, String currentPath) {
+        List<String> paths = new ArrayList<>();
+        String committedName = currentPath;
+        String beforeMove = pendingMoveSource(project, repository, file);
+        if (beforeMove != null && !beforeMove.equals(currentPath)) {
+            paths.add(beforeMove);
+            committedName = beforeMove;
+        }
+        for (String path : historicalPaths(project, repository, committedName)) {
+            if (!paths.contains(path)) {
+                paths.add(path);
+            }
+        }
+        return paths;
+    }
+
+    /** Repository-relative path the file had before a move or rename that is not committed yet, if any. */
+    private static @Nullable String pendingMoveSource(Project project, GitRepository repository, VirtualFile file) {
+        Change change = ChangeListManager.getInstance(project).getChange(file);
+        if (change == null || change.getType() != Change.Type.MOVED || change.getBeforeRevision() == null) {
+            return null;
+        }
+        FilePath before = change.getBeforeRevision().getFile();
+        String rootPath = repository.getRoot().getPath();
+        return FileUtil.isAncestor(rootPath, before.getPath(), true)
+                ? FileUtil.getRelativePath(rootPath, before.getPath(), '/')
+                : null;
     }
 
     private static String read(Project project, GitRepository repository, String revision, String path) throws VcsException {
@@ -141,13 +177,13 @@ final class GitRevisions {
      * Earlier names of the file, newest first; empty when it was never renamed (a copy does not count)
      * or git fails.
      */
-    private static List<String> historicalPaths(Project project, GitRepository repository, VirtualFile file, String currentPath) {
+    private static List<String> historicalPaths(Project project, GitRepository repository, String currentPath) {
         GitLineHandler handler = new GitLineHandler(project, repository.getRoot(), GitCommand.LOG);
         handler.setSilent(true);
         // --name-status tells a rename from a copy; -z: no quoting of non-ASCII names, see GitLogParser#historicalPaths
         handler.addParameters("--follow", "--name-status", "--format=", "-z");
         handler.endOptions();
-        handler.addRelativeFiles(List.of(file));
+        handler.addParameters(currentPath); // relative to the repository root, the handler's working directory
         GitCommandResult result = Git.getInstance().runCommand(handler);
         return result.success() ? GitLogParser.historicalPaths(result.getOutput(), currentPath) : List.of();
     }
