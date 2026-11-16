@@ -9,7 +9,8 @@ Visual comparison of BPMN diagrams with any Git revision, powered by [bpmn.io](h
 
 - **Left:** the current content of the file (including unsaved changes, refreshed while you edit).
 - **Right:** the same file from a chosen branch (local/remote), tag, commit that changed the file,
-  or any revision expression (`HEAD~3`, a hash, …).
+  or any revision expression (`HEAD~3`, a hash, …). A renamed or moved file is followed to its earlier
+  names, both in the list of commits and when reading an older revision.
 - Highlighting: 🟢 added (left), 🔴 removed (right), 🟠 changed attributes, 🟣 moved (layout change).
   The Added / Removed / Changed / Moved chips in the top bar work as a filter – click one to hide that kind
   of change from the diagrams and the change list (counts stay visible, the selection is remembered).
@@ -18,6 +19,10 @@ Visual comparison of BPMN diagrams with any Git revision, powered by [bpmn.io](h
 - **Camunda / Zeebe extensions** are compared too – execution listeners, input/output mappings, form fields,
   `zeebe:taskDefinition`. `bpmn-js-differ` ignores `extensionElements`, so an edit touching only a Camunda
   listener would otherwise show no change at all.
+- **Collapsed subprocesses** – a collapsed subprocess with changes inside gets a dashed outline and a badge
+  counting them, both in the colour of the most important kind of change inside. Stepping to
+  such a change opens the subprocess, and while synchronized both diagrams drill in and out together.
+  The SVG/PNG export contains the level of the diagram currently shown.
 - **F7 / Shift+F7** step through the visible changes (wrapping around, skipping kinds hidden by a chip);
   the same two buttons are in the top bar, and Escape closes the change list.
 - **Diagram ↔ XML** – double-click an element to open the XML editor on it; **Follow caret** (off by default)

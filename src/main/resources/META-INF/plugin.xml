@@ -4,12 +4,21 @@
     <vendor email="petr.sochan@gmail.com">Petr Sochan</vendor>
 
     <description><![CDATA[
-    Visual comparison of BPMN 2.0 diagrams against any Git revision, powered by
+    Visual comparison of BPMN 2.0 diagrams with any Git revision, powered by
     <a href="https://bpmn.io">bpmn.io</a> (bpmn-js and bpmn-js-differ).
     <ul>
-      <li>Current version of the diagram on the left, a branch, tag or commit of your choice on the right.</li>
-      <li>Added, removed, changed and moved elements are highlighted; a change list lets you jump to each change.</li>
-      <li>Optional synchronization of mouse cursor, hover and pan/zoom between both diagrams.</li>
+      <li><b>Side by side</b> – the current diagram, unsaved edits included, next to a branch, tag, commit or any
+          revision expression such as <code>HEAD~3</code>. Renamed and moved files are followed.</li>
+      <li><b>In every IDE diff</b> – pick <b>BPMN diagram</b> in the diff tool selector of the commit dialog, the Git log,
+          <i>Compare with Branch</i> or <i>Compare Two Files</i>; also the way to compare two revisions with each other.</li>
+      <li><b>Highlighting</b> of added, removed, changed and moved elements, with filter chips, a change list and
+          badges listing the changed attributes. Collapsed subprocesses show how many changes they hide.</li>
+      <li><b>Camunda and Zeebe extensions</b> are compared too – execution listeners, input/output mappings,
+          form fields, task definitions – which bpmn-js-differ alone does not see.</li>
+      <li><b>Navigation</b> – F7 / Shift+F7 step through the changes; double-click an element to open it in the XML,
+          and <i>Follow caret</i> selects the element you are editing.</li>
+      <li><b>Export</b> – the change list as Markdown for a pull request, or the diagram with its markers as SVG or PNG.</li>
+      <li><b>Synchronized</b> cursor, hover, pan and zoom between both diagrams.</li>
     </ul>
     Open a <code>.bpmn</code> file and switch to the <b>BPMN Diff</b> tab, or use
     <b>Compare BPMN with Branch or Commit…</b> from the context menu.

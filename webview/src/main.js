@@ -5,6 +5,7 @@ import { getBBox } from 'diagram-js/lib/util/Elements';
 import { KINDS, toChangeList } from './changes.js';
 import { changesToMarkdown, svgToPng, viewerToSvg } from './export.js';
 import { describeAttrs, displayName, typeName } from './format.js';
+import { hiddenChanges, leadingKind } from './planes.js';
 
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-js.css';
@@ -57,6 +58,13 @@ function createPane(side) {
   eventBus.on('canvas.viewbox.changing', () => scheduleViewSync(side));
 
   eventBus.on('canvas.viewbox.changed', () => updateZoomControls());
+
+  // drilling into a collapsed subprocess (or back out through the breadcrumbs) on one side
+  eventBus.on('root.set', (event) => {
+    if (syncEnabled && !applyingSync) {
+      syncPlane(side, event.element.id);
+    }
+  });
 
   eventBus.on('element.hover', (event) => {
     if (syncEnabled) {
@@ -256,8 +264,8 @@ async function pump() {
 
 async function render(payload) {
   const previousView = payload.preserveView ? {
-    left: panes.left.loaded ? { ...canvasOf(panes.left).viewbox() } : null,
-    right: panes.right.loaded ? { ...canvasOf(panes.right).viewbox() } : null
+    left: panes.left.loaded ? viewOf(panes.left) : null,
+    right: panes.right.loaded ? viewOf(panes.right) : null
   } : null;
 
   applyingSync = true;
@@ -315,6 +323,13 @@ function collectFlowElements(pane) {
   return result;
 }
 
+/** Viewbox plus the plane it belongs to, to come back to after a re-render. */
+function viewOf(pane) {
+  const canvas = canvasOf(pane);
+
+  return { ...canvas.viewbox(), rootId: canvas.getRootElement().id };
+}
+
 function restoreOrFit(previousView) {
   for (const side of [ 'left', 'right' ]) {
     const pane = panes[side];
@@ -329,6 +344,13 @@ function restoreOrFit(previousView) {
     const view = previousView && previousView[side];
 
     if (view) {
+      // the subprocess may have been deleted meanwhile - then the top-level plane stays
+      const root = view.rootId && pane.viewer.get('elementRegistry').get(view.rootId);
+
+      if (root) {
+        canvas.setRootElement(root);
+      }
+
       canvas.viewbox({ x: view.x, y: view.y, width: view.width, height: view.height });
     } else {
       canvas.zoom('fit-viewport', 'auto');
@@ -369,8 +391,10 @@ function clearDecorations() {
 
     pane.viewer.get('elementRegistry').forEach((element) => {
       for (const kind of KINDS) {
-        if (canvas.hasMarker(element, 'diff-' + kind)) {
-          canvas.removeMarker(element, 'diff-' + kind);
+        for (const marker of [ 'diff-' + kind, 'diff-nested-' + kind ]) {
+          if (canvas.hasMarker(element, marker)) {
+            canvas.removeMarker(element, marker);
+          }
         }
       }
     });
@@ -414,6 +438,10 @@ function decorate(changeList) {
       }
     }
   }
+
+  for (const pane of Object.values(panes)) {
+    markHiddenChanges(pane, changeList);
+  }
 }
 
 function addBadge(pane, change, kind) {
@@ -439,6 +467,88 @@ function addBadge(pane, change, kind) {
   } catch (err) {
 
     // some elements (e.g. the root) cannot carry overlays
+  }
+}
+
+// ---------------------------------------------------------------------------
+// planes (collapsed subprocesses)
+// ---------------------------------------------------------------------------
+
+/** Id of the plane an element is drawn on, or undefined if the pane does not have it. */
+function rootIdOf(pane, id) {
+  const element = pane.viewer.get('elementRegistry').get(id);
+  const root = element && canvasOf(pane).findRoot(element);
+
+  return root ? root.id : undefined;
+}
+
+/**
+ * Id of the collapsed subprocess shape that opens a plane, or undefined for a top-level plane.
+ *
+ * The plane of subprocess `Sub_1` is the root `Sub_1_plane` sharing its business object, so the
+ * shape is the registry entry under the business object's id - for a process plane that entry is
+ * the root itself.
+ */
+function shapeIdOfRoot(pane, rootId) {
+  const registry = pane.viewer.get('elementRegistry');
+  const root = registry.get(rootId);
+  const shape = root && root.businessObject && registry.get(root.businessObject.id);
+
+  return shape && shape !== root ? shape.id : undefined;
+}
+
+/** Switches the pane to the plane the element is drawn on; nothing happens if it is already shown. */
+function showPlaneOf(pane, element) {
+  const canvas = canvasOf(pane);
+  const root = canvas.findRoot(element);
+
+  if (root) {
+    canvas.setRootElement(root);
+  }
+}
+
+/**
+ * Marks each collapsed subprocess that hides visible changes of this pane: a dashed outline and a
+ * count, both in the colour of the most important kind inside. Dashed, so it does not read as a
+ * change of the subprocess itself.
+ */
+function markHiddenChanges(pane, changeList) {
+  if (!pane.loaded) {
+    return;
+  }
+
+  const drawn = [];
+
+  for (const change of changeList) {
+    const kind = visibleKind(change);
+
+    if (kind && sidesFor(kind).includes(pane.side)) {
+      drawn.push({ id: change.id, kind });
+    }
+  }
+
+  const hidden = hiddenChanges(drawn, (id) => rootIdOf(pane, id), (rootId) => shapeIdOfRoot(pane, rootId));
+
+  for (const [ shapeId, byKind ] of hidden) {
+    const kind = leadingKind(byKind);
+    const count = [ ...byKind.values() ].reduce((sum, n) => sum + n, 0);
+    const breakdown = KINDS.filter((k) => byKind.has(k)).map((k) => byKind.get(k) + ' ' + KIND_LABEL[k].toLowerCase());
+
+    canvasOf(pane).addMarker(shapeId, 'diff-nested-' + kind);
+
+    const badge = document.createElement('span');
+    badge.className = 'diff-badge nested ' + kind;
+    badge.textContent = String(count);
+    setTip(badge, (count === 1 ? '1 change' : count + ' changes') + ' inside this subprocess: '
+      + breakdown.join(', ') + '\n\nOpen it with the drill-down button, or step to it with F7.');
+
+    try {
+      // bottom left: the top right carries the subprocess's own badge, the bottom right the drill-down button
+      pane.viewer.get('overlays').add(shapeId, 'diff', { position: { bottom: 8, left: -8 }, html: badge });
+    } catch (err) {
+
+      // the shape cannot carry an overlay
+    }
   }
 }
 
@@ -611,14 +721,37 @@ function focusElement(id) {
     return;
   }
 
-  // with sync on, centering one side is enough - the other follows
-  const toCenter = syncEnabled ? targets.slice(0, 1) : targets;
+  // a change inside a collapsed subprocess is drawn on the subprocess's own plane - show that one
+  // first, or centring scrolls to coordinates of a plane nobody sees. The panes may need different
+  // planes (the element moved into or out of a subprocess), so the plane sync must not make them
+  // drag each other back and forth.
+  const wasApplying = applyingSync;
+
+  applyingSync = true;
+
+  try {
+    for (const pane of targets) {
+      showPlaneOf(pane, pane.viewer.get('elementRegistry').get(id));
+    }
+
+    // an element on one side only: the other side follows into that plane if it has it
+    if (syncEnabled && targets.length === 1) {
+      syncPlane(targets[0].side, canvasOf(targets[0]).getRootElement().id);
+    }
+  } finally {
+    applyingSync = wasApplying;
+  }
+
+  // centering one side is enough only while both show the same plane - the other one follows;
+  // on different planes the coordinates are unrelated, so each side is centred on its own
+  const together = syncEnabled && panes.left.loaded && panes.right.loaded && onSamePlane(panes.left, panes.right);
+  const toCenter = together ? targets.slice(0, 1) : targets;
 
   for (const pane of toCenter) {
     centerOn(pane, pane.viewer.get('elementRegistry').get(id));
   }
 
-  if (syncEnabled) {
+  if (together) {
     copyViewbox(toCenter[0], panes[other(toCenter[0].side)]);
   }
 
@@ -655,8 +788,9 @@ function loadedPanes() {
 }
 
 /**
- * Runs a zoom action on the diagrams. With sync on, zooming one side is enough - the other follows,
- * so both keep showing the same region; with sync off each side zooms around its own centre.
+ * Runs a zoom action on the diagrams. With sync on and both sides on the same plane, zooming one side
+ * is enough - the other follows, so both keep showing the same region; otherwise each side zooms
+ * around its own centre.
  */
 function applyZoom(action) {
   const loaded = loadedPanes();
@@ -665,13 +799,14 @@ function applyZoom(action) {
     return;
   }
 
-  const targets = syncEnabled ? loaded.slice(0, 1) : loaded;
+  const together = syncEnabled && loaded.length === 2 && onSamePlane(loaded[0], loaded[1]);
+  const targets = together ? loaded.slice(0, 1) : loaded;
 
   for (const pane of targets) {
     action(canvasOf(pane));
   }
 
-  if (syncEnabled) {
+  if (together) {
     copyViewbox(targets[0], panes[other(targets[0].side)]);
   }
 
@@ -749,8 +884,18 @@ function scheduleViewSync(fromSide) {
   });
 }
 
+/** Both panes show the same plane, so the same coordinates mean the same place. */
+function onSamePlane(a, b) {
+  return canvasOf(a).getRootElement().id === canvasOf(b).getRootElement().id;
+}
+
 function copyViewbox(fromPane, toPane) {
   if (!fromPane.loaded || !toPane.loaded) {
+    return;
+  }
+
+  // coordinates of different planes are unrelated places
+  if (!onSamePlane(fromPane, toPane)) {
     return;
   }
 
@@ -766,10 +911,43 @@ function copyViewbox(fromPane, toPane) {
   }
 }
 
+/**
+ * Shows the plane `rootId` on the other side too. A subprocess that exists on one side only leaves
+ * the other side where it is - there is nothing to show.
+ *
+ * The viewbox is copied right away: bpmn-js has already moved the source pane to its position on
+ * the new plane, and does not always scroll it, so the usual scroll-driven sync cannot be relied on.
+ */
+function syncPlane(fromSide, rootId) {
+  const toPane = panes[other(fromSide)];
+
+  if (!toPane.loaded) {
+    return;
+  }
+
+  const root = toPane.viewer.get('elementRegistry').get(rootId);
+
+  if (!root) {
+    return;
+  }
+
+  const wasApplying = applyingSync;
+
+  applyingSync = true;
+
+  try {
+    canvasOf(toPane).setRootElement(root);
+    copyViewbox(panes[fromSide], toPane);
+  } finally {
+    applyingSync = wasApplying;
+  }
+}
+
 function mirrorCursor(fromPane, event) {
   const toPane = panes[other(fromPane.side)];
 
-  if (!fromPane.loaded || !toPane.loaded) {
+  // on different planes the same coordinates mean unrelated places
+  if (!fromPane.loaded || !toPane.loaded || !onSamePlane(fromPane, toPane)) {
     hideGhost(toPane);
     return;
   }
@@ -824,6 +1002,10 @@ function setSync(enabled) {
   syncEnabled = !!enabled;
 
   if (syncEnabled) {
+    if (panes.left.loaded) {
+      syncPlane('left', canvasOf(panes.left).getRootElement().id);
+    }
+
     copyViewbox(panes.left, panes.right);
   } else {
     hideGhost(panes.left);

@@ -160,32 +160,32 @@ button.chip:hover { border-color: var(--accent); }
 .pane .message.error { color: var(--removed); }
 .pane .message:empty { display: none; }
 
+/*
+ * The circle is the element itself, not a pseudo-element hanging out of a 0x0 box, and it gets a
+ * compositor layer of its own. With the old 0x0 box JCEF (off-screen rendering) repainted only part
+ * of the area the ghost had left, so it left a trail of half-drawn circles over the diagram; on its
+ * own layer moving it is a pure transform and nothing underneath is repainted at all.
+ */
 .ghost-cursor {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-  display: none;
-  z-index: 10;
-}
-.ghost-cursor::before {
-  content: "";
-  position: absolute;
-  left: -9px;
-  top: -9px;
+  /* centred on the translated point: 18px + 2 * 2px border */
+  left: -11px;
+  top: -11px;
   width: 18px;
   height: 18px;
   border-radius: 50%;
   border: 2px solid var(--accent);
   background: color-mix(in srgb, var(--accent) 20%, transparent);
+  pointer-events: none;
+  display: none;
+  z-index: 10;
+  will-change: transform;
 }
 .ghost-cursor::after {
   content: "";
   position: absolute;
-  left: -1px;
-  top: -1px;
+  left: 8px;
+  top: 8px;
   width: 2px;
   height: 2px;
   background: var(--accent);
@@ -229,6 +229,13 @@ button.chip:hover { border-color: var(--accent); }
 #change-list .attrs { grid-column: 2 / 4; color: var(--muted); font-family: ui-monospace, Consolas, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; }
 
 /* ---- diagram markers ---- */
+
+/* collapsed subprocess with changes inside: dashed, so it does not read as a change of the subprocess
+   itself - and listed first, so a change of the subprocess itself wins */
+.djs-shape.diff-nested-added .djs-visual > :nth-child(1) { stroke: var(--added) !important; stroke-width: 2.5px !important; stroke-dasharray: 6 4; }
+.djs-shape.diff-nested-removed .djs-visual > :nth-child(1) { stroke: var(--removed) !important; stroke-width: 2.5px !important; stroke-dasharray: 6 4; }
+.djs-shape.diff-nested-changed .djs-visual > :nth-child(1) { stroke: var(--changed) !important; stroke-width: 2.5px !important; stroke-dasharray: 6 4; }
+.djs-shape.diff-nested-layout .djs-visual > :nth-child(1) { stroke: var(--layout) !important; stroke-width: 2.5px !important; stroke-dasharray: 6 4; }
 
 .djs-shape.diff-layout .djs-visual > :nth-child(1) { stroke: var(--layout) !important; stroke-dasharray: 5 3; }
 .djs-connection.diff-layout .djs-visual > path { stroke: var(--layout) !important; stroke-dasharray: 5 3; }
