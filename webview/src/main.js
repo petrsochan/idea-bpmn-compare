@@ -264,8 +264,8 @@ async function pump() {
 
 async function render(payload) {
   const previousView = payload.preserveView ? {
-    left: panes.left.loaded ? { ...canvasOf(panes.left).viewbox() } : null,
-    right: panes.right.loaded ? { ...canvasOf(panes.right).viewbox() } : null
+    left: panes.left.loaded ? viewOf(panes.left) : null,
+    right: panes.right.loaded ? viewOf(panes.right) : null
   } : null;
 
   applyingSync = true;
@@ -323,6 +323,13 @@ function collectFlowElements(pane) {
   return result;
 }
 
+/** Viewbox plus the plane it belongs to, to come back to after a re-render. */
+function viewOf(pane) {
+  const canvas = canvasOf(pane);
+
+  return { ...canvas.viewbox(), rootId: canvas.getRootElement().id };
+}
+
 function restoreOrFit(previousView) {
   for (const side of [ 'left', 'right' ]) {
     const pane = panes[side];
@@ -337,6 +344,13 @@ function restoreOrFit(previousView) {
     const view = previousView && previousView[side];
 
     if (view) {
+      // the subprocess may have been deleted meanwhile - then the top-level plane stays
+      const root = view.rootId && pane.viewer.get('elementRegistry').get(view.rootId);
+
+      if (root) {
+        canvas.setRootElement(root);
+      }
+
       canvas.viewbox({ x: view.x, y: view.y, width: view.width, height: view.height });
     } else {
       canvas.zoom('fit-viewport', 'auto');
