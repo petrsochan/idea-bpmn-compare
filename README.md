@@ -18,6 +18,9 @@ Visual comparison of BPMN diagrams with any Git revision, powered by [bpmn.io](h
 - **Camunda / Zeebe extensions** are compared too – execution listeners, input/output mappings, form fields,
   `zeebe:taskDefinition`. `bpmn-js-differ` ignores `extensionElements`, so an edit touching only a Camunda
   listener would otherwise show no change at all.
+- **Collapsed subprocesses** – a badge on a collapsed subprocess counts the changes inside it. Stepping to
+  such a change opens the subprocess, and while synchronized both diagrams drill in and out together.
+  The SVG/PNG export contains the level of the diagram currently shown.
 - **F7 / Shift+F7** step through the visible changes (wrapping around, skipping kinds hidden by a chip);
   the same two buttons are in the top bar, and Escape closes the change list.
 - **Diagram ↔ XML** – double-click an element to open the XML editor on it; **Follow caret** (off by default)

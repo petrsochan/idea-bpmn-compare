@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Changes inside collapsed subprocesses can be found. A collapsed subprocess shows how many changes it hides, F7 and the change list open the subprocess and centre the element instead of scrolling the top-level diagram to an empty spot, both diagrams drill in and out together while synchronized, and editing the XML no longer throws you out of the subprocess you are looking at.
+
 ## [1.1.1]
 
 ### Changed
