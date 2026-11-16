@@ -102,7 +102,10 @@ interface BpmnContentSource {
                     ? item.label()
                     : item.shortLabel() + " (" + hash + ")";
             try {
-                return DiagramSide.xml(GitRevisions.content(project, repository, file, item.revision()), label);
+                GitRevisions.RevisionContent content = GitRevisions.content(project, repository, file, item.revision());
+                return DiagramSide.xml(content.xml(), content.earlierPath() == null
+                        ? label
+                        : label + " · as " + content.earlierPath());
             } catch (GitRevisions.MissingInRevisionException e) {
                 return DiagramSide.missing(label, "The file does not exist in " + item.shortLabel()
                         + ".\nEverything in the other version is new.");
