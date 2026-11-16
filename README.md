@@ -32,6 +32,12 @@ Visual comparison of BPMN diagrams with any Git revision, powered by [bpmn.io](h
   ![Inside the collapsed "Process payment" subprocess, reached from the change list: the added "Send receipt" task in both diagrams](docs/images/subprocess.png)
 - **F7 / Shift+F7** step through the visible changes (wrapping around, skipping kinds hidden by a chip);
   the same two buttons are in the top bar, and Escape closes the change list.
+- **Element history** – right-click an element in either diagram → *History of "…"*: the commits that changed
+  it, with author, date, message and what happened to it (`Changed: name: "Check stock" → "Verify availability"`,
+  `Moved`, …). Click one to open that commit's BPMN diff, centred on the element. Each commit is compared with its
+  first parent by the same differ as the view – layout tolerance and Camunda/Zeebe extensions included – so a commit
+  is listed exactly when its diff shows the element changed. The history follows renames of the file and reads the
+  same 300 commits as the revision chooser.
 - **Diagram ↔ XML** – double-click an element to open the XML editor on it; **Follow caret** (off by default)
   does the reverse and selects the element the caret is in.
 - **Export** – the change list as Markdown into the clipboard, or the left diagram as SVG/PNG with the markers.
@@ -117,12 +123,15 @@ compatibility is checked by the IntelliJ Plugin Verifier (`./gradlew verifyPlugi
 - `GitRevisions`, `GitLogParser` – Git access and parsing of the revision chooser entries
 - `BpmnXmlLocator` – element id ↔ offset in the XML, for navigating between diagram and editor
 - `GoToChangeAction` – the F7 / Shift+F7 actions
+- `ElementHistory` – the element history: reads Git, has the page decide which commits touched the element,
+  shows the popup and opens the commit diff
 - `Json` – the minimal JSON written to and read from the page
 
 `webview/src/` – page with two `NavigatedViewer`s, markers, synchronization, zoom and filters (`main.js`),
 plus the pure modules it is built from: `changes.js` (change list), `extensions.js` (Camunda/Zeebe
 extension elements), `layout.js` (tolerance for tiny layout shifts), `format.js` (names and values),
-`export.js` (Markdown, SVG, PNG), `planes.js` (changes hidden in collapsed subprocesses).
+`export.js` (Markdown, SVG, PNG), `planes.js` (changes hidden in collapsed subprocesses), `history.js` (what one
+commit did to one element).
 
 `docs/screenshots/` holds the two versions of the sample diagram the pictures in `docs/images/` are taken from:
 build the web view, serve `build/generated/webview/bpmn-compare` together with both files, and pass them to

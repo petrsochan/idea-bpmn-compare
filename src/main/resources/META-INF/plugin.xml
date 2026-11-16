@@ -20,6 +20,8 @@
           Shifts of a few pixels, as modellers make when saving, are not reported as moves.</li>
       <li><b>Camunda and Zeebe extensions</b> are compared too – execution listeners, input/output mappings,
           form fields, task definitions – which bpmn-js-differ alone does not see.</li>
+      <li><b>Element history</b> – right-click an element to see who changed it, when and why, and open the diff
+          of any of those commits centred on it.</li>
       <li><b>Navigation</b> – F7 / Shift+F7 step through the changes; double-click an element to open it in the XML,
           and <i>Follow caret</i> selects the element you are editing.</li>
       <li><b>Export</b> – the change list as Markdown for a pull request, or the diagram with its markers as SVG or PNG.</li>
