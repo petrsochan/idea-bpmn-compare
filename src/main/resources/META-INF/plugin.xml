@@ -6,13 +6,18 @@
     <description><![CDATA[
     Visual comparison of BPMN 2.0 diagrams with any Git revision, powered by
     <a href="https://bpmn.io">bpmn.io</a> (bpmn-js and bpmn-js-differ).
+    <p><img src="https://raw.githubusercontent.com/petrsochan/idea-bpmn-compare/main/docs/images/compare.png"
+            alt="The working copy next to a revision with added, removed, changed and moved elements highlighted"
+            width="700"/></p>
     <ul>
       <li><b>Side by side</b> – the current diagram, unsaved edits included, next to a branch, tag, commit or any
           revision expression such as <code>HEAD~3</code>. Renamed and moved files are followed.</li>
       <li><b>In every IDE diff</b> – pick <b>BPMN diagram</b> in the diff tool selector of the commit dialog, the Git log,
-          <i>Compare with Branch</i> or <i>Compare Two Files</i>; also the way to compare two revisions with each other.</li>
+          <i>Compare with Branch</i> or <i>Compare Two Files</i>; also the way to compare two revisions with each other.
+          The IDE remembers the choice for each kind of diff window.</li>
       <li><b>Highlighting</b> of added, removed, changed and moved elements, with filter chips, a change list and
-          badges listing the changed attributes. Collapsed subprocesses show how many changes they hide.</li>
+          badges listing the changed attributes. Collapsed subprocesses show how many changes they hide.
+          Shifts of a few pixels, as modellers make when saving, are not reported as moves.</li>
       <li><b>Camunda and Zeebe extensions</b> are compared too – execution listeners, input/output mappings,
           form fields, task definitions – which bpmn-js-differ alone does not see.</li>
       <li><b>Navigation</b> – F7 / Shift+F7 step through the changes; double-click an element to open it in the XML,

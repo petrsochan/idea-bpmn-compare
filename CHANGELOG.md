@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Tiny layout shifts are no longer reported as moves. A shape, label or bend point that shifted by at most 5 px – typically a modeller rounding coordinates or re-placing labels when it saves – is left out of the *Moved* count, the markers and the change list. A changed number of bend points and an expanded or collapsed subprocess are still reported.
+
 ## [1.2.0]
 
 ### Added

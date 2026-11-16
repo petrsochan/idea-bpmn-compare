@@ -7,6 +7,8 @@
 Visual comparison of BPMN diagrams with any Git revision, powered by [bpmn.io](https://bpmn.io)
 (`bpmn-js` for rendering, `bpmn-js-differ` for computing the differences).
 
+![The working copy next to a revision: an added task and flows in green, a removed task in red, a renamed task in orange, a moved end event in purple; the collapsed subprocess has a badge counting the 4 changes inside it](docs/images/compare.png)
+
 - **Left:** the current content of the file (including unsaved changes, refreshed while you edit).
 - **Right:** the same file from a chosen branch (local/remote), tag, commit that changed the file,
   or any revision expression (`HEAD~3`, a hash, …). A renamed or moved file is followed to its earlier
@@ -16,6 +18,9 @@ Visual comparison of BPMN diagrams with any Git revision, powered by [bpmn.io](h
   of change from the diagrams and the change list (counts stay visible, the selection is remembered).
   The badge on an element has a tooltip with details; the *Changes list* button shows all changes –
   click an entry to center the element.
+- **Moved means moved** – a shape, label or bend point shifted by at most 5 px is not reported, so a modeller
+  that rounds coordinates or re-places labels when it saves does not mark half the diagram as moved.
+  A changed number of bend points or an expanded/collapsed subprocess is always reported.
 - **Camunda / Zeebe extensions** are compared too – execution listeners, input/output mappings, form fields,
   `zeebe:taskDefinition`. `bpmn-js-differ` ignores `extensionElements`, so an edit touching only a Camunda
   listener would otherwise show no change at all.
@@ -23,6 +28,8 @@ Visual comparison of BPMN diagrams with any Git revision, powered by [bpmn.io](h
   counting them, both in the colour of the most important kind of change inside. Stepping to
   such a change opens the subprocess, and while synchronized both diagrams drill in and out together.
   The SVG/PNG export contains the level of the diagram currently shown.
+
+  ![Inside the collapsed "Process payment" subprocess, reached from the change list: the added "Send receipt" task in both diagrams](docs/images/subprocess.png)
 - **F7 / Shift+F7** step through the visible changes (wrapping around, skipping kinds hidden by a chip);
   the same two buttons are in the top bar, and Escape closes the change list.
 - **Diagram ↔ XML** – double-click an element to open the XML editor on it; **Follow caret** (off by default)
@@ -38,6 +45,8 @@ or right-click the file → **Compare BPMN with Branch or Commit…**.
 
 Any IDE diff of a `.bpmn` file can be switched to the BPMN view as well – open a diff from the commit dialog,
 the Git log, *Compare with Branch…* or *Compare Two Files*, and pick **BPMN diagram** in the diff tool selector.
+The IDE remembers the choice for each kind of diff window (commit dialog, Git log, …), so after picking it once
+there, `.bpmn` files open in the BPMN view straight away – until you switch back to a text diff.
 That is also the way to compare two revisions with each other; the editor tab always has the working copy on the left.
 
 ## Build
@@ -112,7 +121,12 @@ compatibility is checked by the IntelliJ Plugin Verifier (`./gradlew verifyPlugi
 
 `webview/src/` – page with two `NavigatedViewer`s, markers, synchronization, zoom and filters (`main.js`),
 plus the pure modules it is built from: `changes.js` (change list), `extensions.js` (Camunda/Zeebe
-extension elements), `format.js` (names and values), `export.js` (Markdown, SVG, PNG).
+extension elements), `layout.js` (tolerance for tiny layout shifts), `format.js` (names and values),
+`export.js` (Markdown, SVG, PNG), `planes.js` (changes hidden in collapsed subprocesses).
+
+`docs/screenshots/` holds the two versions of the sample diagram the pictures in `docs/images/` are taken from:
+build the web view, serve `build/generated/webview/bpmn-compare` together with both files, and pass them to
+`window.bpmnCompare.setDiagrams({ left: { xml, label }, right: { xml, label } })` in a browser.
 
 Tests: `src/test/java/…` (JUnit) and `webview/test/` (`node:test`). Both run in `./gradlew check`.
 

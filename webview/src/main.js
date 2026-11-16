@@ -5,6 +5,7 @@ import { getBBox } from 'diagram-js/lib/util/Elements';
 import { KINDS, toChangeList } from './changes.js';
 import { changesToMarkdown, svgToPng, viewerToSvg } from './export.js';
 import { describeAttrs, displayName, typeName } from './format.js';
+import { LAYOUT_TOLERANCE, dropMinorLayoutChanges } from './layout.js';
 import { hiddenChanges, leadingKind } from './planes.js';
 
 import 'bpmn-js/dist/assets/diagram-js.css';
@@ -279,7 +280,8 @@ async function render(payload) {
     let changes = null;
 
     if (newDefs && oldDefs) {
-      changes = diff(oldDefs, newDefs);
+      // a modeller that rounds coordinates on save would otherwise mark half the diagram as moved
+      changes = dropMinorLayoutChanges(diff(oldDefs, newDefs), oldDefs, newDefs);
     } else if (newDefs && payload.right && payload.right.missing) {
 
       // file does not exist in the revision -> everything is new
@@ -1089,7 +1091,9 @@ function updateFilterChips() {
     const on = visibleKinds.has(chip.dataset.kind);
     chip.classList.toggle('off', !on);
     chip.setAttribute('aria-pressed', String(on));
-    setTip(chip, (on ? 'Hide ' : 'Show ') + KIND_LABEL[chip.dataset.kind].toLowerCase() + ' elements');
+    const kind = chip.dataset.kind;
+    setTip(chip, (on ? 'Hide ' : 'Show ') + KIND_LABEL[kind].toLowerCase() + ' elements'
+      + (kind === 'layout' ? ' (shifts of up to ' + LAYOUT_TOLERANCE + ' px are ignored)' : ''));
   }
 }
 
