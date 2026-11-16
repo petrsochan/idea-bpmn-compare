@@ -1263,7 +1263,8 @@ function openElementMenu(event) {
 
   const name = (element.businessObject.name || '').trim() || element.id;
 
-  menuTarget = { id: element.id, name, x: original.clientX, y: original.clientY };
+  // strings only: the host reads flat objects of string values
+  menuTarget = { id: element.id, name, x: String(Math.round(original.clientX)), y: String(Math.round(original.clientY)) };
   historyItem.textContent = 'History of "' + name + '"';
   historyItem.setAttribute('aria-disabled', String(!historyState.available));
   setTip(historyItem, historyState.available ? 'Commits that changed this element' : historyState.reason);
@@ -1300,6 +1301,11 @@ for (const pane of Object.values(panes)) {
 /**
  * Works out which of the given commits changed the element, one after the other so the page stays
  * responsive, and answers the host exactly once per call - the host waits for that answer.
+ *
+ * The host reads flat objects of string values only, so the entries travel as one string: entries
+ * separated by U+001E, fields (hash, comma-separated kinds, summary) by U+001F. Neither can occur
+ * inside a field - ids and kinds never contain them, and the summary quotes values with
+ * JSON.stringify, which escapes every control character.
  */
 async function computeHistory({ token, id, commits }) {
   try {
@@ -1309,11 +1315,11 @@ async function computeHistory({ token, id, commits }) {
       const change = await commitChange(id, commit.before, commit.after, historyModdle);
 
       if (change) {
-        entries.push({ hash: commit.hash, ...change });
+        entries.push([ commit.hash, change.kinds.join(','), change.summary ].join('\u001f'));
       }
     }
 
-    sendToHost({ command: 'historyChunk', token, entries });
+    sendToHost({ command: 'historyChunk', token, entries: entries.join('\u001e') });
   } catch (err) {
     console.error('[bpmn-compare] history failed', err);
     sendToHost({ command: 'historyChunk', token, error: String(err && err.message || err) });

@@ -1,11 +1,12 @@
 package com.github.bpmncompare;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
  * Minimal JSON for talking to the web view: a writer for the payloads pushed to the page (strings,
- * booleans, numbers, nested maps) and a reader for the flat string objects the page sends back.
+ * booleans, numbers, nested maps and lists) and a reader for the flat string objects the page sends back.
  */
 final class Json {
 
@@ -132,6 +133,15 @@ final class Json {
                 write(entry.getValue(), out);
             }
             out.append('}');
+        } else if (value instanceof List<?> list) {
+            out.append('[');
+            for (int i = 0; i < list.size(); i++) {
+                if (i > 0) {
+                    out.append(',');
+                }
+                write(list.get(i), out);
+            }
+            out.append(']');
         } else {
             throw new IllegalArgumentException("Unsupported JSON value: " + value.getClass());
         }

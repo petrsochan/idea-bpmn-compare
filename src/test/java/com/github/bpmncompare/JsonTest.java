@@ -3,6 +3,7 @@ package com.github.bpmncompare;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,5 +62,14 @@ class JsonTest {
         message.put("payload", "line1\nline2 \"quoted\" <tag>");
 
         assertEquals(message, Json.read(Json.write(message)));
+    }
+
+    @Test
+    void writesListsOfMapsAndNulls() {
+        Map<String, Object> commit = new LinkedHashMap<>();
+        commit.put("hash", "abc");
+        commit.put("before", null);
+
+        assertEquals("[{\"hash\":\"abc\",\"before\":null},\"x\"]", Json.write(List.of(commit, "x")));
     }
 }

@@ -34,6 +34,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileWrapper;
 import com.intellij.ui.ColorUtil;
 import com.intellij.ui.JBColor;
+import com.intellij.ui.awt.RelativePoint;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.jcef.JBCefApp;
@@ -45,6 +46,7 @@ import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import git4idea.repo.GitRepository;
 import git4idea.repo.GitRepositoryChangeListener;
+import git4idea.repo.GitRepositoryManager;
 import org.cef.browser.CefBrowser;
 import org.cef.browser.CefFrame;
 import org.cef.handler.CefLifeSpanHandlerAdapter;
@@ -104,6 +106,11 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     private BpmnContentSource rightSource;
     private DiagramSide leftSide;
     private DiagramSide rightSide;
+
+    /** The element history being read, which receives the page's answers; at most one at a time. */
+    private @Nullable ElementHistory history;
+    /** Element to centre on once the diagrams are shown, for a diff window opened from the history. */
+    private @Nullable String focusOnLoad;
 
     /** Per side, so a slow load of one pane cannot discard a newer load of the other. */
     private final EnumMap<Side, Integer> requests = new EnumMap<>(Side.class);
@@ -250,6 +257,14 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         String payload = String.valueOf(message.get("payload"));
         switch (command) {
             case "openXml" -> onEdt(() -> openXml(String.valueOf(message.get("id"))));
+            case "elementHistory" -> onEdt(() -> showElementHistory(message));
+            case "historyChunk" -> {
+                // not via the EDT: the history's background task is waiting for exactly this
+                ElementHistory running = history;
+                if (running != null) {
+                    running.onChunk(message);
+                }
+            }
             case "copyMarkdown" -> onEdt(() -> CopyPasteManager.getInstance().setContents(new StringSelection(payload)));
             case "saveSvg" -> onEdt(() -> saveExport("svg", payload.getBytes(StandardCharsets.UTF_8)));
             case "savePng" -> onEdt(() -> saveExport("png", decodeDataUrl(payload)));
@@ -315,6 +330,47 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         if (id != null) {
             call("selectElement", id);
         }
+    }
+
+    /** Right-click → history of an element: the commits that changed it, read from Git. */
+    private void showElementHistory(Map<String, Object> message) {
+        GitRepository repository = file == null ? null : GitRevisions.repositoryFor(project, file);
+        if (history != null || repository == null || browser == null) {
+            return;
+        }
+        Point point = new Point(parseInt(message.get("x")), parseInt(message.get("y")));
+        RelativePoint anchor = new RelativePoint(browser.getComponent(), point);
+        String id = String.valueOf(message.get("id"));
+        String name = String.valueOf(message.get("name"));
+        history = ElementHistory.start(project, file, repository, id, name,
+                args -> call("computeHistory", args), anchor, () -> history = null);
+    }
+
+    private static int parseInt(Object value) {
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    /** Tells the page whether its element menu can offer the history, and if not, why. */
+    private void pushHistoryAvailability() {
+        if (!pageReady) {
+            return;
+        }
+        String reason = file == null ? "The diagram is not a file in the project."
+                : GitRepositoryManager.getInstance(project).getRepositoryForFileQuick(file) == null
+                ? "The file is not under Git version control." : null;
+        Map<String, Object> state = new LinkedHashMap<>();
+        state.put("available", reason == null);
+        state.put("reason", reason == null ? "" : reason);
+        call("setHistoryAvailable", state);
+    }
+
+    /** Centres the view on this element once the diagrams are shown. */
+    void focusOnLoad(@Nullable String id) {
+        focusOnLoad = id;
     }
 
     /** Opens the text editor of the file with the caret on the element carrying {@code id}. */
@@ -575,6 +631,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     private void pushAll(boolean preserveView) {
         pushTheme();
         pushSync();
+        pushHistoryAvailability();
         pushDiagrams(preserveView);
     }
 
@@ -586,7 +643,19 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         payload.put("left", leftSide.toJson());
         payload.put("right", rightSide.toJson());
         payload.put("preserveView", preserveView);
+        if (focusOnLoad != null) {
+            payload.put("focus", focusOnLoad);
+            // the element may be on the side still loading - keep asking until both are there
+            if (!isLoading(leftSide) && !isLoading(rightSide)) {
+                focusOnLoad = null;
+            }
+        }
         call("setDiagrams", payload);
+    }
+
+    /** The placeholder shown until a side's content arrives: no diagram, no error, not missing. */
+    private static boolean isLoading(DiagramSide side) {
+        return side.xml() == null && side.error() == null && !side.missing();
     }
 
     /** Steps the web view to the next (+1) or previous (-1) visible change. */
