@@ -9,7 +9,8 @@ Visual comparison of BPMN diagrams with any Git revision, powered by [bpmn.io](h
 
 - **Left:** the current content of the file (including unsaved changes, refreshed while you edit).
 - **Right:** the same file from a chosen branch (local/remote), tag, commit that changed the file,
-  or any revision expression (`HEAD~3`, a hash, …).
+  or any revision expression (`HEAD~3`, a hash, …). A renamed or moved file is followed to its earlier
+  names, both in the list of commits and when reading an older revision.
 - Highlighting: 🟢 added (left), 🔴 removed (right), 🟠 changed attributes, 🟣 moved (layout change).
   The Added / Removed / Changed / Moved chips in the top bar work as a filter – click one to hide that kind
   of change from the diagrams and the change list (counts stay visible, the selection is remembered).

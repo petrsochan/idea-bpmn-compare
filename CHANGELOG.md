@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - Changes inside collapsed subprocesses can be found. A collapsed subprocess shows how many changes it hides, F7 and the change list open the subprocess and centre the element instead of scrolling the top-level diagram to an empty spot, both diagrams drill in and out together while synchronized, and editing the XML no longer throws you out of the subprocess you are looking at.
+- A renamed or moved diagram keeps its history. The revision chooser lists the commits from before the rename, and an older revision is read under the name the file had then, instead of the file being reported as missing and every element as added. The label of such a revision says which name was used.
 
 ## [1.1.1]
 
