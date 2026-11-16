@@ -42,7 +42,8 @@ Priority (from the user): first **who and why** (author, date, commit message), 
 ## Design
 
 ### Flow
-1. **Page**: `element.contextmenu` on a pane opens a small page-drawn menu (the page draws its own UI anyway,
+1. **Page**: `element.contextmenu` on a pane (each pane reads the history of its own file – in a diff of two
+   different files they differ) opens a small page-drawn menu (the page draws its own UI anyway,
    see tooltips) with *History of "&lt;name&gt;"*. The native context menu is suppressed. Choosing it sends
    `{ command: 'elementHistory', id }` to the host. Labels resolve to their owner element; the process/plane
    root has no menu entry.
@@ -57,7 +58,8 @@ Priority (from the user): first **who and why** (author, date, commit message), 
      history with branches the log interleaves commits of different branches by date, and diffing
      neighbours would attribute one branch's changes to the other. It is also exactly what the diff window
      opened by a click shows.
-   - Sends `{ token, id, commits: [{ hash, before, after }] }` to the page via `bpmnCompare.computeHistory`
+   - Sends `{ token, id, blobs: { <blob id>: xml }, commits: [{ hash, before: <blob id>|null, after: <blob id>|null }] }`
+     (every version once per chunk) to the page via `bpmnCompare.computeHistory`
      in chunks of 10 commits, newest first, waiting for the page's answer to each chunk – one call with
      every version of a large diagram would be tens of MB of JavaScript.
 3. **Page** (new pure module `history.js`): for each commit parses `before` and `after` with `bpmn-moddle`

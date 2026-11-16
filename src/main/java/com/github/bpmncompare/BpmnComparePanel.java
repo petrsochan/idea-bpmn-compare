@@ -85,6 +85,11 @@ final class BpmnComparePanel extends JPanel implements Disposable {
 
     private final Project project;
     private final VirtualFile file;
+    /**
+     * The file whose history the right pane's element menu shows. The same file in the editor tab, where the
+     * right pane is a revision of it; in a diff window possibly another one (<i>Compare Two Files</i>).
+     */
+    private @Nullable VirtualFile rightFile;
 
     private final JButton revisionButton = new JButton();
     private final JBCheckBox syncBox = new JBCheckBox("Synchronize mouse & view", BpmnCompareSettings.isSyncEnabled());
@@ -131,6 +136,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         super(new BorderLayout());
         this.project = project;
         this.file = file;
+        this.rightFile = file;
         this.leftSource = left;
         this.rightSource = right;
         this.leftSide = DiagramSide.message("Loading " + left.label() + "…");
@@ -332,8 +338,15 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         }
     }
 
+    /** The file the right pane's element history reads, when it is not the panel's file. */
+    void historyFileOfRight(@Nullable VirtualFile file) {
+        rightFile = file;
+    }
+
     /** Right-click → history of an element: the commits that changed it, read from Git. */
     private void showElementHistory(Map<String, Object> message) {
+        // each pane reads the history of its own file - in a diff of two files they differ
+        VirtualFile file = "right".equals(message.get("side")) ? rightFile : this.file;
         GitRepository repository = file == null ? null : GitRevisions.repositoryFor(project, file);
         if (history != null || repository == null || browser == null) {
             return;
@@ -361,18 +374,24 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         }
     }
 
-    /** Tells the page whether its element menu can offer the history, and if not, why. */
+    /** Tells the page, per pane, whether its element menu can offer the history, and if not, why. */
     private void pushHistoryAvailability() {
         if (!pageReady) {
             return;
         }
-        String reason = file == null ? "The diagram is not a file in the project."
-                : GitRepositoryManager.getInstance(project).getRepositoryForFileQuick(file) == null
-                ? "The file is not under Git version control." : null;
+        Map<String, Object> state = new LinkedHashMap<>();
+        state.put("left", historyAvailability(file));
+        state.put("right", historyAvailability(rightFile));
+        call("setHistoryAvailable", state);
+    }
+
+    private Map<String, Object> historyAvailability(@Nullable VirtualFile file) {
+        String reason = ElementHistory.unavailableReason(file,
+                f -> GitRepositoryManager.getInstance(project).getRepositoryForFileQuick(f) != null);
         Map<String, Object> state = new LinkedHashMap<>();
         state.put("available", reason == null);
         state.put("reason", reason == null ? "" : reason);
-        call("setHistoryAvailable", state);
+        return state;
     }
 
     /** Centres the view on this element once the diagrams are shown. */

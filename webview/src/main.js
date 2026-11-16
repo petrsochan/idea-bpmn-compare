@@ -85,7 +85,7 @@ function createPane(side) {
   });
 
   // right-click: the element's history, read by the host from Git
-  eventBus.on('element.contextmenu', (event) => openElementMenu(event));
+  eventBus.on('element.contextmenu', (event) => openElementMenu(side, event));
 
   canvasEl.addEventListener('mousemove', (event) => {
     if (syncEnabled) {
@@ -1236,16 +1236,26 @@ document.addEventListener('keydown', (event) => {
 const elementMenu = document.getElementById('element-menu');
 const historyItem = document.getElementById('element-history');
 
-/** Whether the host can read the history; until it says so, there is no menu at all. */
-let historyState = { available: false, reason: '' };
+/** Per pane: whether the host can read the history; until it says so, there is no menu at all. */
+let historyState = {};
 let menuTarget = null;
 const historyModdle = new BpmnModdle();
 
+/**
+ * @param state `{ left: { available, reason }, right: { available, reason } }` - each pane reads the
+ *   history of its own file, and in a diff of two files those are different files
+ */
 function setHistoryAvailable(state) {
-  historyState = { available: !!(state && state.available), reason: state && state.reason || '' };
+  historyState = {};
+
+  for (const side of [ 'left', 'right' ]) {
+    const sideState = state && state[side];
+
+    historyState[side] = { available: !!(sideState && sideState.available), reason: sideState && sideState.reason || '' };
+  }
 }
 
-function openElementMenu(event) {
+function openElementMenu(side, event) {
   const original = event.originalEvent;
   const element = event.element.type === 'label' && event.element.labelTarget ? event.element.labelTarget : event.element;
 
@@ -1254,7 +1264,9 @@ function openElementMenu(event) {
   }
 
   // the plane itself (a process, a subprocess drilled into) is not an element of the diagram
-  if (!element.parent || !element.businessObject || (!historyState.available && !historyState.reason) || !original) {
+  const state = historyState[side];
+
+  if (!element.parent || !element.businessObject || !state || (!state.available && !state.reason) || !original) {
     return;
   }
 
@@ -1264,10 +1276,10 @@ function openElementMenu(event) {
   const name = (element.businessObject.name || '').trim() || element.id;
 
   // strings only: the host reads flat objects of string values
-  menuTarget = { id: element.id, name, x: String(Math.round(original.clientX)), y: String(Math.round(original.clientY)) };
+  menuTarget = { id: element.id, name, side, x: String(Math.round(original.clientX)), y: String(Math.round(original.clientY)) };
   historyItem.textContent = 'History of "' + name + '"';
-  historyItem.setAttribute('aria-disabled', String(!historyState.available));
-  setTip(historyItem, historyState.available ? 'Commits that changed this element' : historyState.reason);
+  historyItem.setAttribute('aria-disabled', String(!state.available));
+  setTip(historyItem, state.available ? 'Commits that changed this element' : state.reason);
 
   elementMenu.hidden = false;
 

@@ -39,6 +39,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
 
 /**
  * The commits that changed one element of a diagram: who, when and why, and from each of them the BPMN
@@ -99,6 +100,18 @@ final class ElementHistory {
     static ElementHistory create(Project project, VirtualFile file, GitRepository repository, String id, String name,
                                  Page page) {
         return new ElementHistory(project, file, repository, id, name, page);
+    }
+
+    /**
+     * Why a pane's element menu cannot offer the history, or {@code null} when it can.
+     *
+     * @param inGit whether the file belongs to a Git repository
+     */
+    static @Nullable String unavailableReason(@Nullable VirtualFile file, Predicate<VirtualFile> inGit) {
+        if (file == null) {
+            return "The diagram is not a file in the project.";
+        }
+        return inGit.test(file) ? null : "The file is not under Git version control.";
     }
 
     /** Ends the run quietly: the view it belongs to was closed. */

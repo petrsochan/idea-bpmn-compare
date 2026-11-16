@@ -1,5 +1,6 @@
 package com.github.bpmncompare;
 
+import com.intellij.testFramework.LightVirtualFile;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -73,6 +74,22 @@ class ElementHistoryTest {
     void waitingForThePageGivesUpAfterTheTimeout() {
         assertThrows(ElementHistory.HistoryException.class,
                 () -> ElementHistory.awaitAnswer(new LinkedBlockingQueue<>(), () -> false, 60, 20));
+    }
+
+    @Test
+    void aSideWithoutAFileHasNoHistory() {
+        assertEquals("The diagram is not a file in the project.", ElementHistory.unavailableReason(null, f -> true));
+    }
+
+    @Test
+    void aFileOutsideGitHasNoHistory() {
+        assertEquals("The file is not under Git version control.",
+                ElementHistory.unavailableReason(new LightVirtualFile("a.bpmn"), f -> false));
+    }
+
+    @Test
+    void aFileInGitHasHistory() {
+        assertNull(ElementHistory.unavailableReason(new LightVirtualFile("a.bpmn"), f -> true));
     }
 
     @Test

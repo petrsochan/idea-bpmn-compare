@@ -29,6 +29,9 @@ final class BpmnDiffViewer implements FrameDiffTool.DiffViewer {
         this.panel = new BpmnComparePanel(context.getProject(), BpmnDiffTool.fileOf(contents.get(AFTER)),
                 new BpmnContentSource.Fixed(textOf(contents.get(AFTER)), title(titles, AFTER, "After")),
                 new BpmnContentSource.Fixed(textOf(contents.get(BEFORE)), title(titles, BEFORE, "Before")));
+        // the right pane shows the "before" content: its history is that file's, which in a diff of two
+        // different files is not the panel's
+        this.panel.historyFileOfRight(BpmnDiffTool.fileOf(contents.get(BEFORE)));
         // a diff opened from the element history centres on that element
         this.panel.focusOnLoad(request.getUserData(ElementHistory.FOCUS_ELEMENT));
     }
