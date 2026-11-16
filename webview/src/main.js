@@ -59,6 +59,13 @@ function createPane(side) {
 
   eventBus.on('canvas.viewbox.changed', () => updateZoomControls());
 
+  // drilling into a collapsed subprocess (or back out through the breadcrumbs) on one side
+  eventBus.on('root.set', (event) => {
+    if (syncEnabled && !applyingSync) {
+      syncPlane(side, event.element.id);
+    }
+  });
+
   eventBus.on('element.hover', (event) => {
     if (syncEnabled) {
       setSyncHover(other(side), event.element.id, true);
@@ -847,10 +854,43 @@ function copyViewbox(fromPane, toPane) {
   }
 }
 
+/**
+ * Shows the plane `rootId` on the other side too. A subprocess that exists on one side only leaves
+ * the other side where it is - there is nothing to show.
+ *
+ * The viewbox follows by itself: the plane switch scrolls the source pane, which schedules the
+ * usual viewbox sync for the next frame.
+ */
+function syncPlane(fromSide, rootId) {
+  const toPane = panes[other(fromSide)];
+
+  if (!toPane.loaded) {
+    return;
+  }
+
+  const root = toPane.viewer.get('elementRegistry').get(rootId);
+
+  if (!root) {
+    return;
+  }
+
+  const wasApplying = applyingSync;
+
+  applyingSync = true;
+
+  try {
+    canvasOf(toPane).setRootElement(root);
+  } finally {
+    applyingSync = wasApplying;
+  }
+}
+
 function mirrorCursor(fromPane, event) {
   const toPane = panes[other(fromPane.side)];
 
-  if (!fromPane.loaded || !toPane.loaded) {
+  // on different planes the same coordinates mean unrelated places
+  if (!fromPane.loaded || !toPane.loaded
+      || canvasOf(fromPane).getRootElement().id !== canvasOf(toPane).getRootElement().id) {
     hideGhost(toPane);
     return;
   }
@@ -905,6 +945,10 @@ function setSync(enabled) {
   syncEnabled = !!enabled;
 
   if (syncEnabled) {
+    if (panes.left.loaded) {
+      syncPlane('left', canvasOf(panes.left).getRootElement().id);
+    }
+
     copyViewbox(panes.left, panes.right);
   } else {
     hideGhost(panes.left);
