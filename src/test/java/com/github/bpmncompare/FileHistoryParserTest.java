@@ -27,7 +27,7 @@ class FileHistoryParserTest {
     private static final String BLOB_C = "c".repeat(40);
 
     private static String header(String hash, String subject) {
-        return RS + String.join(US, hash, hash.substring(0, 7), "2026-11-02", "Jan Novák", subject);
+        return RS + String.join(US, hash, "2026-11-02", "Jan Novák", subject);
     }
 
     /** As git prints it with -z: the header's line end, a blank line, then NUL-terminated fields. */

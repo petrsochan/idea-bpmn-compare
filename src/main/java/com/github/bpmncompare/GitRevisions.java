@@ -1,5 +1,6 @@
 package com.github.bpmncompare;
 
+import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vcs.FilePath;
@@ -11,6 +12,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import git4idea.GitLocalBranch;
 import git4idea.GitRemoteBranch;
 import git4idea.commands.Git;
+import git4idea.commands.GitBinaryHandler;
 import git4idea.commands.GitCommand;
 import git4idea.commands.GitCommandResult;
 import git4idea.commands.GitLineHandler;
@@ -22,7 +24,11 @@ import org.jetbrains.annotations.Nullable;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Git access used by the compare view. All methods block and must be called from a background thread.
@@ -73,6 +79,56 @@ final class GitRevisions {
             return List.of();
         }
         return result.getOutput().stream().map(String::trim).filter(s -> !s.isEmpty()).limit(MAX_TAGS).toList();
+    }
+
+    /**
+     * The commits that changed the file, with its content before and after each of them, read with two
+     * git calls whatever the length of the history: the log names the blobs, one {@code cat-file --batch}
+     * reads them all. The same depth and rename handling as the revision chooser.
+     */
+    static FileHistory fileHistoryWithBlobs(Project project, GitRepository repository, VirtualFile file,
+                                            ProgressIndicator indicator) throws VcsException {
+        GitLineHandler log = new GitLineHandler(project, repository.getRoot(), GitCommand.LOG);
+        log.setSilent(true);
+        // --raw against the first parent: the blob ids before and after each commit, renames included
+        log.addParameters("--follow", "--raw", "--no-abbrev", "-z", "--max-count=" + MAX_COMMITS, "--date=short",
+                GitLogParser.HISTORY_FORMAT);
+        log.endOptions();
+        String beforeMove = pendingMoveSource(project, repository, file);
+        if (beforeMove != null) {
+            log.addParameters(beforeMove);
+        } else {
+            log.addRelativeFiles(List.of(file));
+        }
+        GitCommandResult result = Git.getInstance().runCommand(log);
+        result.throwOnError();
+        List<HistoryCommit> commits = GitLogParser.parseHistory(String.join("\n", result.getOutput()));
+        indicator.checkCanceled();
+
+        Set<String> ids = new LinkedHashSet<>();
+        for (HistoryCommit commit : commits) {
+            if (commit.beforeBlob() != null) {
+                ids.add(commit.beforeBlob());
+            }
+            if (commit.afterBlob() != null) {
+                ids.add(commit.afterBlob());
+            }
+        }
+        Map<String, String> blobs = new HashMap<>();
+        if (!ids.isEmpty()) {
+            GitBinaryHandler catFile = new GitBinaryHandler(project, repository.getRoot(), GitCommand.CAT_FILE);
+            catFile.setSilent(true);
+            catFile.addParameters("--batch");
+            catFile.setInputProcessor(out -> {
+                try (out) {
+                    out.write((String.join("\n", ids) + "\n").getBytes(StandardCharsets.US_ASCII));
+                }
+            });
+            GitLogParser.parseCatFileBatch(catFile.run())
+                    .forEach((id, bytes) -> blobs.put(id, stripBom(new String(bytes, StandardCharsets.UTF_8))));
+        }
+        indicator.checkCanceled();
+        return new FileHistory(commits, blobs);
     }
 
     private static List<RevisionItem> fileHistory(Project project, GitRepository repository, VirtualFile file) throws VcsException {

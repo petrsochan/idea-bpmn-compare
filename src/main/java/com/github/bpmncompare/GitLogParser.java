@@ -98,31 +98,45 @@ final class GitLogParser {
      * Format of the element history log: a record separator before each commit, so commits can be told
      * apart from the NUL-separated raw records that {@code -z} puts after them.
      */
-    static final String HISTORY_FORMAT = "--format=%x1e%H%x1f%h%x1f%ad%x1f%an%x1f%s";
+    // no %h: --no-abbrev, needed for full blob ids, makes %h print the full hash as well
+    static final String HISTORY_FORMAT = "--format=%x1e%H%x1f%ad%x1f%an%x1f%s";
 
+    private static final int HISTORY_FIELDS = 4;
+    private static final int SHORT_HASH = 7;
     private static final String NO_BLOB = "0".repeat(40);
 
     /**
      * @param output output of {@code git log --follow --raw --no-abbrev -z --date=short} with
-     *               {@link #HISTORY_FORMAT}; a commit without a raw record (a merge) is left out
+     *               {@link #HISTORY_FORMAT}: per commit the header ended by NUL (and a line break), then
+     *               the NUL-terminated raw record; a commit without one (a merge) is left out
      */
     static List<HistoryCommit> parseHistory(String output) {
         List<HistoryCommit> commits = new ArrayList<>();
         for (String chunk : output.split("\u001e")) {
-            int lineEnd = chunk.indexOf('\n');
-            String header = lineEnd < 0 ? chunk : chunk.substring(0, lineEnd);
-            String[] fields = header.split(FIELD_SEPARATOR, FIELDS);
-            if (fields.length < FIELDS || lineEnd < 0) {
+            int headerEnd = indexOfAny(chunk, '\u0000', '\n');
+            if (headerEnd < 0) {
                 continue;
             }
-            String[] raw = rawRecord(chunk.substring(lineEnd + 1));
-            if (raw == null) {
+            String[] fields = chunk.substring(0, headerEnd).split(FIELD_SEPARATOR, HISTORY_FIELDS);
+            String[] raw = rawRecord(chunk.substring(headerEnd + 1));
+            if (fields.length < HISTORY_FIELDS || raw == null) {
                 continue;
             }
-            commits.add(new HistoryCommit(fields[0], fields[1], fields[2], fields[3], fields[4],
-                    blobOrNull(raw[2]), blobOrNull(raw[3])));
+            String hash = fields[0];
+            commits.add(new HistoryCommit(hash, hash.substring(0, Math.min(SHORT_HASH, hash.length())),
+                    fields[1], fields[2], fields[3], blobOrNull(raw[2]), blobOrNull(raw[3])));
         }
         return commits;
+    }
+
+    private static int indexOfAny(String text, char first, char second) {
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == first || c == second) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /** {@code :<old mode> <new mode> <old blob> <new blob> <status>} split on spaces, or {@code null}. */
