@@ -1,11 +1,13 @@
 import NavigatedViewer from 'bpmn-js/lib/NavigatedViewer';
 import { diff } from 'bpmn-js-differ';
+import { BpmnModdle } from 'bpmn-moddle';
 import { getBBox } from 'diagram-js/lib/util/Elements';
 
 import { KINDS, toChangeList } from './changes.js';
 import { changesToMarkdown, svgToPng, viewerToSvg } from './export.js';
 import { KIND_LABEL, describeAttrs, displayName, typeName } from './format.js';
 import { LAYOUT_TOLERANCE, dropMinorLayoutChanges } from './layout.js';
+import { commitChange } from './history.js';
 import { hiddenChanges, leadingKind } from './planes.js';
 
 import 'bpmn-js/dist/assets/diagram-js.css';
@@ -81,6 +83,9 @@ function createPane(side) {
       sendToHost({ command: 'openXml', id: event.element.id });
     }
   });
+
+  // right-click: the element's history, read by the host from Git
+  eventBus.on('element.contextmenu', (event) => openElementMenu(event));
 
   canvasEl.addEventListener('mousemove', (event) => {
     if (syncEnabled) {
@@ -305,6 +310,11 @@ async function render(payload) {
     renderChangeList(currentChanges);
 
     restoreOrFit(previousView);
+
+    // a diff window opened from the element history shows the element it was opened for
+    if (payload.focus) {
+      focusElement(payload.focus);
+    }
     updateZoomControls();
     updateChangeNav();
   } finally {
@@ -1160,7 +1170,10 @@ document.getElementById('export').addEventListener('click', (event) => {
   document.getElementById('export').classList.toggle('active', !exportMenu.hidden);
 });
 
-document.addEventListener('click', () => closeExportMenu());
+document.addEventListener('click', () => {
+  closeExportMenu();
+  closeElementMenu();
+});
 
 for (const item of exportMenu.querySelectorAll('li')) {
   item.addEventListener('click', async () => {
@@ -1207,14 +1220,110 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'F7') {
     event.preventDefault();
     goToChange(event.shiftKey ? -1 : 1);
+  } else if (event.key === 'Escape' && !elementMenu.hidden) {
+    event.preventDefault();
+    closeElementMenu();
   } else if (event.key === 'Escape' && !isChangeListHidden()) {
     event.preventDefault();
     setChangeListVisible(false);
   }
 });
 
+// ---------------------------------------------------------------------------
+// element history
+// ---------------------------------------------------------------------------
+
+const elementMenu = document.getElementById('element-menu');
+const historyItem = document.getElementById('element-history');
+
+/** Whether the host can read the history; until it says so, there is no menu at all. */
+let historyState = { available: false, reason: '' };
+let menuTarget = null;
+const historyModdle = new BpmnModdle();
+
+function setHistoryAvailable(state) {
+  historyState = { available: !!(state && state.available), reason: state && state.reason || '' };
+}
+
+function openElementMenu(event) {
+  const original = event.originalEvent;
+  const element = event.element.type === 'label' && event.element.labelTarget ? event.element.labelTarget : event.element;
+
+  if (original) {
+    original.preventDefault();
+  }
+
+  // the plane itself (a process, a subprocess drilled into) is not an element of the diagram
+  if (!element.parent || !element.businessObject || (!historyState.available && !historyState.reason) || !original) {
+    return;
+  }
+
+  closeExportMenu();
+  hideTip();
+
+  const name = (element.businessObject.name || '').trim() || element.id;
+
+  menuTarget = { id: element.id, name, x: original.clientX, y: original.clientY };
+  historyItem.textContent = 'History of "' + name + '"';
+  historyItem.setAttribute('aria-disabled', String(!historyState.available));
+  setTip(historyItem, historyState.available ? 'Commits that changed this element' : historyState.reason);
+
+  elementMenu.hidden = false;
+
+  const box = elementMenu.getBoundingClientRect();
+
+  elementMenu.style.left = Math.max(0, Math.min(original.clientX, window.innerWidth - box.width - 4)) + 'px';
+  elementMenu.style.top = Math.max(0, Math.min(original.clientY, window.innerHeight - box.height - 4)) + 'px';
+}
+
+function closeElementMenu() {
+  elementMenu.hidden = true;
+}
+
+historyItem.addEventListener('click', (event) => {
+  event.stopPropagation();
+
+  if (historyItem.getAttribute('aria-disabled') === 'true') {
+    return;
+  }
+
+  closeElementMenu();
+  sendToHost({ command: 'elementHistory', ...menuTarget });
+});
+
+window.addEventListener('blur', closeElementMenu);
+
+for (const pane of Object.values(panes)) {
+  pane.viewer.get('eventBus').on('canvas.viewbox.changing', closeElementMenu);
+}
+
+/**
+ * Works out which of the given commits changed the element, one after the other so the page stays
+ * responsive, and answers the host exactly once per call - the host waits for that answer.
+ */
+async function computeHistory({ token, id, commits }) {
+  try {
+    const entries = [];
+
+    for (const commit of commits || []) {
+      const change = await commitChange(id, commit.before, commit.after, historyModdle);
+
+      if (change) {
+        entries.push({ hash: commit.hash, ...change });
+      }
+    }
+
+    sendToHost({ command: 'historyChunk', token, entries });
+  } catch (err) {
+    console.error('[bpmn-compare] history failed', err);
+    sendToHost({ command: 'historyChunk', token, error: String(err && err.message || err) });
+  }
+}
+
 window.bpmnCompare = {
   setDiagrams,
+  setHistoryAvailable,
+  computeHistory,
   setSync,
   setTheme,
   setStatus,

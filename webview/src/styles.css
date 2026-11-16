@@ -297,6 +297,22 @@ button.chip:hover { border-color: var(--accent); }
 #export-menu li { padding: 4px 10px; cursor: pointer; white-space: nowrap; }
 #export-menu li:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 
+#element-menu {
+  position: fixed;
+  z-index: 30;
+  margin: 0;
+  padding: 3px 0;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+}
+#element-menu[hidden] { display: none; }
+#element-menu li { padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+#element-menu li:hover:not([aria-disabled="true"]) { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+#element-menu li[aria-disabled="true"] { opacity: .45; cursor: default; }
+
 /* ---- tooltips ---- */
 
 /*
