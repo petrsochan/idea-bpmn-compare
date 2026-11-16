@@ -3,6 +3,9 @@
  * so everything in this file is unit-tested in ../test/format.test.js.
  */
 
+/** How each change kind is called in the chips, the change list and the element history. */
+export const KIND_LABEL = { added: 'Added', removed: 'Removed', changed: 'Changed', layout: 'Moved' };
+
 export function displayName(change) {
   const model = change.model || {};
 

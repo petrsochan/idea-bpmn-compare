@@ -33,7 +33,7 @@ export function dropMinorLayoutChanges(changes, oldDefs, newDefs, tolerance = LA
 }
 
 /** Every BPMNShape / BPMNEdge of all diagrams, by the id of the element it draws. */
-function diByElementId(defs) {
+export function diByElementId(defs) {
   const result = new Map();
 
   for (const diagram of (defs && defs.diagrams) || []) {

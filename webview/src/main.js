@@ -4,7 +4,7 @@ import { getBBox } from 'diagram-js/lib/util/Elements';
 
 import { KINDS, toChangeList } from './changes.js';
 import { changesToMarkdown, svgToPng, viewerToSvg } from './export.js';
-import { describeAttrs, displayName, typeName } from './format.js';
+import { KIND_LABEL, describeAttrs, displayName, typeName } from './format.js';
 import { LAYOUT_TOLERANCE, dropMinorLayoutChanges } from './layout.js';
 import { hiddenChanges, leadingKind } from './planes.js';
 
@@ -19,7 +19,6 @@ import './styles.css';
  * The host (IntelliJ plugin) drives this page through window.bpmnCompare.
  */
 
-const KIND_LABEL = { added: 'Added', removed: 'Removed', changed: 'Changed', layout: 'Moved' };
 const KIND_BADGE = { added: '+', removed: '−', changed: '✎', layout: '⇄' };
 
 const panes = {
