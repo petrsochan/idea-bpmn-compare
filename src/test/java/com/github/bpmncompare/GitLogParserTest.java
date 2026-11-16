@@ -53,4 +53,31 @@ class GitLogParserTest {
         assertTrue(item.label().endsWith("…"), item.label());
         assertTrue(item.shortLabel().length() < 45, item.shortLabel());
     }
+
+    @Test
+    void historicalPathsAreTheEarlierNamesNewestFirst() {
+        List<String> output = List.of("diagrams/order.bpmn\0\0diagrams/order.bpmn\0\0old/order-process.bpmn\0\0order.bpmn\0");
+
+        assertEquals(List.of("old/order-process.bpmn", "order.bpmn"),
+                GitLogParser.historicalPaths(output, "diagrams/order.bpmn"));
+    }
+
+    @Test
+    void historicalPathsAcceptNewlineSeparatedOutputToo() {
+        assertEquals(List.of("old.bpmn"),
+                GitLogParser.historicalPaths(List.of("new.bpmn", "", "old.bpmn", "old.bpmn"), "new.bpmn"));
+    }
+
+    @Test
+    void historicalPathsKeepNonAsciiNamesAsTheyAre() {
+        assertEquals(List.of("procesy/schválení.bpmn"),
+                GitLogParser.historicalPaths(List.of("procesy/schválení-v2.bpmn\0procesy/schválení.bpmn\0"),
+                        "procesy/schválení-v2.bpmn"));
+    }
+
+    @Test
+    void historicalPathsOfANeverRenamedFileAreEmpty() {
+        assertEquals(List.of(), GitLogParser.historicalPaths(List.of("a.bpmn\0a.bpmn\0"), "a.bpmn"));
+        assertEquals(List.of(), GitLogParser.historicalPaths(List.of(), "a.bpmn"));
+    }
 }

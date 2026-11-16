@@ -1,6 +1,7 @@
 package com.github.bpmncompare;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
@@ -39,6 +40,24 @@ final class GitLogParser {
                     shortHash + " " + abbreviate(subject, SHORT_LABEL_SUBJECT_MAX)));
         }
         return commits;
+    }
+
+    /**
+     * Paths a file had before, newest first, without the current one.
+     *
+     * @param lines output of {@code git log --follow --name-only --format= -z -- <path>}; NUL- or
+     *              newline-separated, blank entries are skipped
+     */
+    static List<String> historicalPaths(List<String> lines, String currentPath) {
+        LinkedHashSet<String> paths = new LinkedHashSet<>();
+        for (String line : lines) {
+            for (String path : line.split("[\\x00\\n]")) {
+                if (!path.isBlank() && !path.equals(currentPath)) {
+                    paths.add(path);
+                }
+            }
+        }
+        return List.copyOf(paths);
     }
 
     private static String abbreviate(String text, int max) {
