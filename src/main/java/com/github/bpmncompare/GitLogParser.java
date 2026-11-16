@@ -1,8 +1,14 @@
 package com.github.bpmncompare;
 
+import org.jetbrains.annotations.Nullable;
+
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Parses {@code git log} output into entries of the "compare with" chooser.
@@ -86,6 +92,95 @@ final class GitLogParser {
             }
         }
         return List.copyOf(paths);
+    }
+
+    /**
+     * Format of the element history log: a record separator before each commit, so commits can be told
+     * apart from the NUL-separated raw records that {@code -z} puts after them.
+     */
+    static final String HISTORY_FORMAT = "--format=%x1e%H%x1f%h%x1f%ad%x1f%an%x1f%s";
+
+    private static final String NO_BLOB = "0".repeat(40);
+
+    /**
+     * @param output output of {@code git log --follow --raw --no-abbrev -z --date=short} with
+     *               {@link #HISTORY_FORMAT}; a commit without a raw record (a merge) is left out
+     */
+    static List<HistoryCommit> parseHistory(String output) {
+        List<HistoryCommit> commits = new ArrayList<>();
+        for (String chunk : output.split("\u001e")) {
+            int lineEnd = chunk.indexOf('\n');
+            String header = lineEnd < 0 ? chunk : chunk.substring(0, lineEnd);
+            String[] fields = header.split(FIELD_SEPARATOR, FIELDS);
+            if (fields.length < FIELDS || lineEnd < 0) {
+                continue;
+            }
+            String[] raw = rawRecord(chunk.substring(lineEnd + 1));
+            if (raw == null) {
+                continue;
+            }
+            commits.add(new HistoryCommit(fields[0], fields[1], fields[2], fields[3], fields[4],
+                    blobOrNull(raw[2]), blobOrNull(raw[3])));
+        }
+        return commits;
+    }
+
+    /** {@code :<old mode> <new mode> <old blob> <new blob> <status>} split on spaces, or {@code null}. */
+    private static String @Nullable [] rawRecord(String body) {
+        for (String token : body.split("\u0000")) {
+            String trimmed = token.strip();
+            if (trimmed.startsWith(":")) {
+                String[] parts = trimmed.split(" ");
+                return parts.length >= 5 ? parts : null;
+            }
+        }
+        return null;
+    }
+
+    private static @Nullable String blobOrNull(String id) {
+        return NO_BLOB.equals(id) ? null : id;
+    }
+
+    /**
+     * @param output output of {@code git cat-file --batch}: per object a header {@code <id> blob <size>}
+     *               followed by exactly size bytes and a newline, or {@code <id> missing}
+     * @return id → content of every object found; a truncated last object is left out
+     */
+    static Map<String, byte[]> parseCatFileBatch(byte[] output) {
+        Map<String, byte[]> blobs = new LinkedHashMap<>();
+        int pos = 0;
+        while (pos < output.length) {
+            int lineEnd = indexOf(output, (byte) '\n', pos);
+            if (lineEnd < 0) {
+                break;
+            }
+            String[] header = new String(output, pos, lineEnd - pos, StandardCharsets.US_ASCII).split(" ");
+            pos = lineEnd + 1;
+            if (header.length < 3) {
+                continue; // "<id> missing"
+            }
+            int size;
+            try {
+                size = Integer.parseInt(header[2]);
+            } catch (NumberFormatException e) {
+                break;
+            }
+            if (pos + size > output.length) {
+                break;
+            }
+            blobs.put(header[0], Arrays.copyOfRange(output, pos, pos + size));
+            pos += size + 1;
+        }
+        return blobs;
+    }
+
+    private static int indexOf(byte[] bytes, byte value, int from) {
+        for (int i = from; i < bytes.length; i++) {
+            if (bytes[i] == value) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private static String abbreviate(String text, int max) {

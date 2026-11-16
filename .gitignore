@@ -48,3 +48,4 @@ bin/
 .intellijPlatform/
 .playwright-mcp/
 webview/node_modules/
+.superpowers/
