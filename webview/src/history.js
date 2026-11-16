@@ -21,15 +21,64 @@ const SUMMARY_MAX = 120;
  *   element, or when a side does not parse - one broken version must not end the whole history
  */
 export async function commitChange(id, before, after, moddle = new BpmnModdle()) {
-  let oldDefs, newDefs;
+  const oldDefs = before == null ? null : await parse(moddle, before);
+  const newDefs = after == null ? null : await parse(moddle, after);
 
-  try {
-    oldDefs = before == null ? null : (await moddle.fromXML(before)).rootElement;
-    newDefs = after == null ? null : (await moddle.fromXML(after)).rootElement;
-  } catch (err) {
-    return null;
+  return oldDefs === BROKEN || newDefs === BROKEN ? null : changeBetween(id, oldDefs, newDefs);
+}
+
+/**
+ * The commits of one chunk that changed the element, in their order.
+ *
+ * Versions travel once per chunk, by blob id: in a linear history a commit's `before` is the next
+ * commit's `after`, so sending and parsing them per commit would double both. Each version is parsed
+ * once and shared by the commits that use it - the differ does not modify the definitions it reads.
+ *
+ * @param {Object<string, string>} blobs blob id -> BPMN XML
+ * @param {Array<{ hash: string, before: string|null, after: string|null }>} commits blob ids, null = absent
+ * @returns {Promise<Array<{ hash: string, kinds: string[], summary: string }>>}
+ */
+export async function chunkChanges(id, blobs, commits, moddle = new BpmnModdle()) {
+  const parsed = new Map();
+  const version = (blobId) => {
+    if (blobId == null) {
+      return null;
+    }
+
+    if (!parsed.has(blobId)) {
+      // a blob the host could not read counts as broken
+      parsed.set(blobId, typeof blobs[blobId] === 'string' ? parse(moddle, blobs[blobId]) : BROKEN);
+    }
+
+    return parsed.get(blobId);
+  };
+  const entries = [];
+
+  for (const commit of commits) {
+    const oldDefs = await version(commit.before);
+    const newDefs = await version(commit.after);
+    const change = oldDefs === BROKEN || newDefs === BROKEN ? null : changeBetween(id, oldDefs, newDefs);
+
+    if (change) {
+      entries.push({ hash: commit.hash, ...change });
+    }
   }
 
+  return entries;
+}
+
+/** Marks a version that does not parse: one broken commit must not end the whole history. */
+const BROKEN = Symbol('broken');
+
+async function parse(moddle, xml) {
+  try {
+    return (await moddle.fromXML(xml)).rootElement;
+  } catch (err) {
+    return BROKEN;
+  }
+}
+
+function changeBetween(id, oldDefs, newDefs) {
   if (!oldDefs || !newDefs) {
     const present = oldDefs || newDefs;
 

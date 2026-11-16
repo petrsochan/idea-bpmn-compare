@@ -38,6 +38,7 @@ import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 /**
  * The commits that changed one element of a diagram: who, when and why, and from each of them the BPMN
@@ -79,6 +80,8 @@ final class ElementHistory {
     private final Page page;
     private final BlockingQueue<Map<String, Object>> answers = new LinkedBlockingQueue<>();
     private volatile String expectedToken;
+    /** Set when the view is closed: the page will never answer, and nobody is left to show the result to. */
+    private volatile boolean stopped;
 
     private ElementHistory(Project project, VirtualFile file, GitRepository repository, String id, String name, Page page) {
         this.project = project;
@@ -90,16 +93,17 @@ final class ElementHistory {
     }
 
     /**
-     * Reads the history in the background and shows it in a popup at {@code anchor}.
-     *
-     * @param onFinished called on the EDT when the run is over, however it ended
-     * @return the run, which must receive the page's {@code historyChunk} answers
+     * A run that has not started yet. The caller keeps it where the page's {@code historyChunk} answers
+     * arrive before calling {@link #run}, so no answer can come in while nobody is holding it.
      */
-    static ElementHistory start(Project project, VirtualFile file, GitRepository repository, String id, String name,
-                                Page page, RelativePoint anchor, Runnable onFinished) {
-        ElementHistory history = new ElementHistory(project, file, repository, id, name, page);
-        history.queue(anchor, onFinished);
-        return history;
+    static ElementHistory create(Project project, VirtualFile file, GitRepository repository, String id, String name,
+                                 Page page) {
+        return new ElementHistory(project, file, repository, id, name, page);
+    }
+
+    /** Ends the run quietly: the view it belongs to was closed. */
+    void stop() {
+        stopped = true;
     }
 
     /** A {@code historyChunk} message from the page; answers to an earlier, abandoned chunk are dropped. */
@@ -109,7 +113,12 @@ final class ElementHistory {
         }
     }
 
-    private void queue(RelativePoint anchor, Runnable onFinished) {
+    /**
+     * Reads the history in the background and shows it in a popup at {@code anchor}.
+     *
+     * @param onFinished called on the EDT when the run is over, however it ended
+     */
+    void run(RelativePoint anchor, Runnable onFinished) {
         new Task.Backgroundable(project, "Reading history of " + file.getName(), true) {
             private FileHistory history;
             private final List<Row> rows = new ArrayList<>();
@@ -134,11 +143,16 @@ final class ElementHistory {
 
             @Override
             public void onSuccess() {
-                show(rows, history.commits().size(), history.blobs(), anchor);
+                if (!stopped && anchor.getComponent().isShowing()) {
+                    show(rows, history.commits().size(), history.blobs(), anchor);
+                }
             }
 
             @Override
             public void onThrowable(@NotNull Throwable error) {
+                if (stopped) {
+                    return;
+                }
                 Messages.showErrorDialog(project, "Cannot read the history of " + file.getName() + ": "
                         + error.getMessage(), "BPMN Compare");
             }
@@ -153,38 +167,23 @@ final class ElementHistory {
 
     /** Sends one chunk to the page and waits for its answer, staying responsive to Cancel. */
     private List<Row> ask(List<HistoryCommit> chunk, Map<String, String> blobs, ProgressIndicator indicator) {
+        if (stopped) {
+            throw new ProcessCanceledException();
+        }
         String token = UUID.randomUUID().toString();
         answers.clear();
         expectedToken = token;
 
-        List<Object> commits = new ArrayList<>();
         Map<String, HistoryCommit> byHash = new HashMap<>();
         for (HistoryCommit commit : chunk) {
-            Map<String, Object> json = new LinkedHashMap<>();
-            json.put("hash", commit.hash());
-            json.put("before", text(blobs, commit.beforeBlob()));
-            json.put("after", text(blobs, commit.afterBlob()));
-            commits.add(json);
             byHash.put(commit.hash(), commit);
         }
-        Map<String, Object> args = new LinkedHashMap<>();
-        args.put("token", token);
-        args.put("id", id);
-        args.put("commits", commits);
-        page.computeHistory(args);
+        page.computeHistory(chunkArgs(token, id, chunk, blobs));
 
-        Map<String, Object> answer = null;
-        for (long waited = 0; answer == null; waited += POLL_MS) {
-            indicator.checkCanceled();
-            if (waited >= ANSWER_TIMEOUT_MS) {
-                throw new HistoryException("the diff view did not answer");
-            }
-            try {
-                answer = answers.poll(POLL_MS, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new ProcessCanceledException();
-            }
+        Map<String, Object> answer =
+                awaitAnswer(answers, () -> stopped || indicator.isCanceled(), ANSWER_TIMEOUT_MS, POLL_MS);
+        if (answer == null) {
+            throw new ProcessCanceledException();
         }
         if (answer.get("error") != null) {
             throw new HistoryException(String.valueOf(answer.get("error")));
@@ -198,6 +197,61 @@ final class ElementHistory {
             }
         }
         return rows;
+    }
+
+    /**
+     * The page's arguments for one chunk: every version the chunk needs once, by blob id, and the commits
+     * referring to them - in a linear history a commit's version before is the next one's version after,
+     * so inlining the text per commit would send and parse each version twice.
+     */
+    static Map<String, Object> chunkArgs(String token, String id, List<HistoryCommit> chunk, Map<String, String> blobs) {
+        Map<String, Object> versions = new LinkedHashMap<>();
+        List<Object> commits = new ArrayList<>();
+        for (HistoryCommit commit : chunk) {
+            Map<String, Object> json = new LinkedHashMap<>();
+            json.put("hash", commit.hash());
+            json.put("before", commit.beforeBlob());
+            json.put("after", commit.afterBlob());
+            commits.add(json);
+            for (String blob : new String[] {commit.beforeBlob(), commit.afterBlob()}) {
+                if (blob != null && blobs.containsKey(blob)) {
+                    versions.putIfAbsent(blob, blobs.get(blob));
+                }
+            }
+        }
+        Map<String, Object> args = new LinkedHashMap<>();
+        args.put("token", token);
+        args.put("id", id);
+        args.put("blobs", versions);
+        args.put("commits", commits);
+        return args;
+    }
+
+    /**
+     * Waits for the page's answer to a chunk.
+     *
+     * @param stopped polled between waits; once true the wait ends at once with {@code null}
+     * @throws HistoryException when no answer came within {@code timeoutMs}
+     */
+    static @Nullable Map<String, Object> awaitAnswer(BlockingQueue<Map<String, Object>> answers, BooleanSupplier stopped,
+                                                     long timeoutMs, long pollMs) {
+        for (long waited = 0; ; waited += pollMs) {
+            if (stopped.getAsBoolean()) {
+                return null;
+            }
+            if (waited >= timeoutMs) {
+                throw new HistoryException("the diff view did not answer");
+            }
+            try {
+                Map<String, Object> answer = answers.poll(pollMs, TimeUnit.MILLISECONDS);
+                if (answer != null) {
+                    return answer;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return null;
+            }
+        }
     }
 
     private static @Nullable String text(Map<String, String> blobs, @Nullable String blob) {
@@ -280,7 +334,7 @@ final class ElementHistory {
     }
 
     /** A failure worth showing to the user, as opposed to a bug. */
-    private static final class HistoryException extends RuntimeException {
+    static final class HistoryException extends RuntimeException {
         HistoryException(String message) {
             super(message);
         }

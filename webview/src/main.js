@@ -7,7 +7,7 @@ import { KINDS, toChangeList } from './changes.js';
 import { changesToMarkdown, svgToPng, viewerToSvg } from './export.js';
 import { KIND_LABEL, describeAttrs, displayName, typeName } from './format.js';
 import { LAYOUT_TOLERANCE, dropMinorLayoutChanges } from './layout.js';
-import { commitChange } from './history.js';
+import { chunkChanges } from './history.js';
 import { hiddenChanges, leadingKind } from './planes.js';
 
 import 'bpmn-js/dist/assets/diagram-js.css';
@@ -1307,17 +1307,10 @@ for (const pane of Object.values(panes)) {
  * inside a field - ids and kinds never contain them, and the summary quotes values with
  * JSON.stringify, which escapes every control character.
  */
-async function computeHistory({ token, id, commits }) {
+async function computeHistory({ token, id, blobs, commits }) {
   try {
-    const entries = [];
-
-    for (const commit of commits || []) {
-      const change = await commitChange(id, commit.before, commit.after, historyModdle);
-
-      if (change) {
-        entries.push([ commit.hash, change.kinds.join(','), change.summary ].join('\u001f'));
-      }
-    }
+    const entries = (await chunkChanges(id, blobs || {}, commits || [], historyModdle))
+      .map((entry) => [ entry.hash, entry.kinds.join(','), entry.summary ].join('\u001f'));
 
     sendToHost({ command: 'historyChunk', token, entries: entries.join('\u001e') });
   } catch (err) {

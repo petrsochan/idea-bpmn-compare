@@ -108,7 +108,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     private DiagramSide rightSide;
 
     /** The element history being read, which receives the page's answers; at most one at a time. */
-    private @Nullable ElementHistory history;
+    private volatile @Nullable ElementHistory history;
     /** Element to centre on once the diagrams are shown, for a diff window opened from the history. */
     private @Nullable String focusOnLoad;
 
@@ -342,8 +342,15 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         RelativePoint anchor = new RelativePoint(browser.getComponent(), point);
         String id = String.valueOf(message.get("id"));
         String name = String.valueOf(message.get("name"));
-        history = ElementHistory.start(project, file, repository, id, name,
-                args -> call("computeHistory", args), anchor, () -> history = null);
+        ElementHistory run = ElementHistory.create(project, file, repository, id, name,
+                args -> call("computeHistory", args));
+        // held before it starts, so the page's first answer always finds it
+        history = run;
+        run.run(anchor, () -> {
+            if (history == run) {
+                history = null;
+            }
+        });
     }
 
     private static int parseInt(Object value) {
@@ -706,5 +713,10 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     public void dispose() {
         disposed = true;
         pageReady = false;
+        // the page is gone: a running history would wait for answers that never come
+        ElementHistory running = history;
+        if (running != null) {
+            running.stop();
+        }
     }
 }

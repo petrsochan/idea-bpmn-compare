@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { commitChange } from '../src/history.js';
+import { BpmnModdle } from 'bpmn-moddle';
+
+import { chunkChanges, commitChange } from '../src/history.js';
 
 /*
  * What one commit did to one element, with the real moddle and differ - the same pipeline the
@@ -84,4 +86,31 @@ test('a long summary is cut', async () => {
 
   assert.ok(change.summary.length <= 120, change.summary.length);
   assert.ok(change.summary.endsWith('…'));
+});
+
+test('a chunk parses every version once and reports the commits that touched the element', async () => {
+  const real = new BpmnModdle();
+  let parses = 0;
+  const counting = { fromXML: (xml) => { parses++; return real.fromXML(xml); } };
+
+  // newest first, linear: c3 renames the task, c2 renames another one, c1 created the file
+  const blobs = { v1: bpmn(), v2: bpmn({ other: 'Ship it' }), v3: bpmn({ name: 'Verify availability', other: 'Ship it' }) };
+  const commits = [
+    { hash: 'c3', before: 'v2', after: 'v3' },
+    { hash: 'c2', before: 'v1', after: 'v2' },
+    { hash: 'c1', before: null, after: 'v1' }
+  ];
+
+  const entries = await chunkChanges('Task_1', blobs, commits, counting);
+
+  assert.deepEqual(entries.map((e) => [ e.hash, e.kinds ]), [ [ 'c3', [ 'changed' ] ], [ 'c1', [ 'added' ] ] ]);
+  assert.equal(entries[0].summary, 'Changed: name: "Check stock" → "Verify availability"');
+  assert.equal(parses, 3);
+});
+
+test('a chunk skips a commit whose version is broken or was not read', async () => {
+  const blobs = { v1: bpmn(), v2: '<broken' };
+  const commits = [ { hash: 'c3', before: 'v2', after: 'v1' }, { hash: 'c2', before: 'v1', after: 'gone' } ];
+
+  assert.deepEqual(await chunkChanges('Task_1', blobs, commits), []);
 });
