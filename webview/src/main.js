@@ -529,8 +529,8 @@ function addHiddenChangeBadges(pane, changeList) {
       + '\n\nOpen it with the drill-down button, or step to it with F7.');
 
     try {
-      // bottom right: the top right carries the subprocess's own badge, the bottom left the drill-down button
-      pane.viewer.get('overlays').add(shapeId, 'diff', { position: { bottom: 10, right: 8 }, html: badge });
+      // bottom left: the top right carries the subprocess's own badge, the bottom right the drill-down button
+      pane.viewer.get('overlays').add(shapeId, 'diff', { position: { bottom: 8, left: -8 }, html: badge });
     } catch (err) {
 
       // the shape cannot carry an overlay
@@ -708,19 +708,36 @@ function focusElement(id) {
   }
 
   // a change inside a collapsed subprocess is drawn on the subprocess's own plane - show that one
-  // first, or centring scrolls to coordinates of a plane nobody sees
-  for (const pane of targets) {
-    showPlaneOf(pane, pane.viewer.get('elementRegistry').get(id));
+  // first, or centring scrolls to coordinates of a plane nobody sees. The panes may need different
+  // planes (the element moved into or out of a subprocess), so the plane sync must not make them
+  // drag each other back and forth.
+  const wasApplying = applyingSync;
+
+  applyingSync = true;
+
+  try {
+    for (const pane of targets) {
+      showPlaneOf(pane, pane.viewer.get('elementRegistry').get(id));
+    }
+
+    // an element on one side only: the other side follows into that plane if it has it
+    if (syncEnabled && targets.length === 1) {
+      syncPlane(targets[0].side, canvasOf(targets[0]).getRootElement().id);
+    }
+  } finally {
+    applyingSync = wasApplying;
   }
 
-  // with sync on, centering one side is enough - the other follows
-  const toCenter = syncEnabled ? targets.slice(0, 1) : targets;
+  // centering one side is enough only while both show the same plane - the other one follows;
+  // on different planes the coordinates are unrelated, so each side is centred on its own
+  const together = syncEnabled && panes.left.loaded && panes.right.loaded && onSamePlane(panes.left, panes.right);
+  const toCenter = together ? targets.slice(0, 1) : targets;
 
   for (const pane of toCenter) {
     centerOn(pane, pane.viewer.get('elementRegistry').get(id));
   }
 
-  if (syncEnabled) {
+  if (together) {
     copyViewbox(toCenter[0], panes[other(toCenter[0].side)]);
   }
 
@@ -851,8 +868,18 @@ function scheduleViewSync(fromSide) {
   });
 }
 
+/** Both panes show the same plane, so the same coordinates mean the same place. */
+function onSamePlane(a, b) {
+  return canvasOf(a).getRootElement().id === canvasOf(b).getRootElement().id;
+}
+
 function copyViewbox(fromPane, toPane) {
   if (!fromPane.loaded || !toPane.loaded) {
+    return;
+  }
+
+  // coordinates of different planes are unrelated places
+  if (!onSamePlane(fromPane, toPane)) {
     return;
   }
 
@@ -903,8 +930,7 @@ function mirrorCursor(fromPane, event) {
   const toPane = panes[other(fromPane.side)];
 
   // on different planes the same coordinates mean unrelated places
-  if (!fromPane.loaded || !toPane.loaded
-      || canvasOf(fromPane).getRootElement().id !== canvasOf(toPane).getRootElement().id) {
+  if (!fromPane.loaded || !toPane.loaded || !onSamePlane(fromPane, toPane)) {
     hideGhost(toPane);
     return;
   }
