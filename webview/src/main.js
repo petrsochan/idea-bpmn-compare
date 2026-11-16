@@ -9,6 +9,7 @@ import { KIND_LABEL, describeAttrs, displayName, typeName } from './format.js';
 import { LAYOUT_TOLERANCE, dropMinorLayoutChanges } from './layout.js';
 import { chunkChanges } from './history.js';
 import { hiddenChanges, leadingKind } from './planes.js';
+import { createFullRepaint } from './repaint.js';
 
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-js.css';
@@ -20,6 +21,15 @@ import './styles.css';
  *
  * The host (IntelliJ plugin) drives this page through window.bpmnCompare.
  */
+
+// see repaint.js - without it JCEF in the IDE keeps pieces of earlier frames on screen
+const repaintFully = createFullRepaint(document.getElementById('repaint'));
+
+for (const type of [ 'pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup' ]) {
+  window.addEventListener(type, repaintFully, { capture: true, passive: true });
+}
+window.addEventListener('resize', repaintFully);
+window.addEventListener('blur', repaintFully);
 
 const KIND_BADGE = { added: '+', removed: '−', changed: '✎', layout: '⇄' };
 
@@ -57,7 +67,10 @@ function createPane(side) {
 
   const eventBus = pane.viewer.get('eventBus');
 
-  eventBus.on('canvas.viewbox.changing', () => scheduleViewSync(side));
+  eventBus.on('canvas.viewbox.changing', () => {
+    repaintFully();
+    scheduleViewSync(side);
+  });
 
   eventBus.on('canvas.viewbox.changed', () => updateZoomControls());
 
@@ -165,7 +178,10 @@ document.addEventListener('mouseover', (event) => {
   }
 
   clearTimeout(tipTimer);
-  tipTimer = setTimeout(() => showTip(target), TIP_DELAY_MS);
+  tipTimer = setTimeout(() => {
+    showTip(target);
+    repaintFully();
+  }, TIP_DELAY_MS);
 });
 
 document.addEventListener('mouseout', (event) => {
@@ -262,6 +278,9 @@ async function pump() {
     } catch (err) {
       console.error('[bpmn-compare] render failed', err);
     }
+
+    // the import finishes long after the host's call started the last burst
+    repaintFully();
   }
 
   rendering = false;
@@ -769,7 +788,12 @@ function focusElement(id) {
   for (const pane of targets) {
     const canvas = canvasOf(pane);
     canvas.addMarker(id, 'diff-focus');
-    setTimeout(() => canvas.hasMarker(id, 'diff-focus') && canvas.removeMarker(id, 'diff-focus'), 1500);
+    setTimeout(() => {
+      if (canvas.hasMarker(id, 'diff-focus')) {
+        canvas.removeMarker(id, 'diff-focus');
+        repaintFully();
+      }
+    }, 1500);
   }
 }
 
@@ -1331,7 +1355,7 @@ async function computeHistory({ token, id, blobs, commits }) {
   }
 }
 
-window.bpmnCompare = {
+const hostApi = {
   setDiagrams,
   setHistoryAvailable,
   computeHistory,
@@ -1343,3 +1367,9 @@ window.bpmnCompare = {
   goToChange,
   selectElement
 };
+
+// whatever the host asks for may change the picture
+window.bpmnCompare = Object.fromEntries(Object.entries(hostApi).map(([ name, fn ]) => [ name, (...args) => {
+  repaintFully();
+  return fn(...args);
+} ]));

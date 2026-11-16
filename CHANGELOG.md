@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Element history** – right-click an element and pick *History of "…"* to see the commits that changed it: author, date, commit message and what happened to the element, such as a rename or a move. A click opens that commit's diff in the BPMN view, centred on the element. A commit is listed exactly when its diff shows the element changed – the same comparison as the view, Camunda and Zeebe extensions and the tolerance for tiny shifts included – and renames of the file are followed.
 
 ### Changed
+- Panning or zooming a large diagram, or moving the mouse while the diagrams are synchronized, no longer leaves pieces of earlier frames on screen – white blocks over the diagram, a strip of it repeated below, ghost cursors that stayed where the mouse had been. The IDE's embedded browser copied only the last of several quickly drawn frames, so the page now repaints the whole view while something moves.
 - Tiny layout shifts are no longer reported as moves. A shape, label or bend point that shifted by at most 5 px – typically a modeller rounding coordinates or re-placing labels when it saves – is left out of the *Moved* count, the markers and the change list. A changed number of bend points and an expanded or collapsed subprocess are still reported.
 
 ## [1.2.0]

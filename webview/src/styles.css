@@ -336,3 +336,11 @@ button.chip:hover { border-color: var(--accent); }
   pointer-events: none;
 }
 #tip[hidden] { display: none; }
+
+/* see repaint.js: tinted imperceptibly, on top of everything, never in the way of the mouse */
+#repaint {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000;
+}
