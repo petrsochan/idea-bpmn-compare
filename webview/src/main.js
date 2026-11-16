@@ -686,6 +686,12 @@ function focusElement(id) {
     return;
   }
 
+  // a change inside a collapsed subprocess is drawn on the subprocess's own plane - show that one
+  // first, or centring scrolls to coordinates of a plane nobody sees
+  for (const pane of targets) {
+    showPlaneOf(pane, pane.viewer.get('elementRegistry').get(id));
+  }
+
   // with sync on, centering one side is enough - the other follows
   const toCenter = syncEnabled ? targets.slice(0, 1) : targets;
 
