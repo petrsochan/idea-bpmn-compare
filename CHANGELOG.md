@@ -5,12 +5,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.2.0]
+
 ### Added
 - A collapsed subprocess with changes inside is marked with a dashed outline and a badge counting them, coloured by the most important kind of change inside, and while synchronized both diagrams drill in and out of subprocesses together.
 
 ### Fixed
 - Changes inside collapsed subprocesses can be reached. F7 and the change list open the subprocess and centre the element instead of scrolling the top-level diagram to an empty spot, and editing the XML no longer throws you out of the subprocess you are looking at.
 - A renamed or moved diagram keeps its history. The revision chooser lists the commits from before the rename, and an older revision is read under the name the file had then, instead of the file being reported as missing and every element as added. The rename is followed before it is committed too, so renaming or moving the file in the IDE and comparing with HEAD or picking an older commit still shows what changed. The label of such a revision says which name was used. A diagram copied from another one is still shown as new, not compared with the file it was copied from.
+- The synchronized ghost cursor no longer leaves a trail of half-drawn circles over the diagram as it moves.
 
 ## [1.1.1]
 
