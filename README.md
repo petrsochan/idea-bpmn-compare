@@ -141,7 +141,10 @@ collapsed subprocesses), `history.js` (what one commit did to one element).
 build the web view, serve `build/generated/webview/bpmn-compare` together with both files, and pass them to
 `window.bpmnCompare.setDiagrams({ left: { xml, label }, right: { xml, label } })` in a browser.
 
-Tests: `src/test/java/…` (JUnit) and `webview/test/` (`node:test`). Both run in `./gradlew check`.
+Tests: `src/test/java/…` (JUnit), `webview/test/` (`node:test`, the pure modules) and `webview/e2e/`
+(Playwright in Chromium, the built page with two test diagrams: rendering, synchronization, subprocess
+planes, F7, filters, menus and the messages to the IDE). All of them run in `./gradlew check`; the browser
+tests alone with `npm run e2e` in `webview/` (after a one-time `npx playwright install chromium`).
 
 ### Things that look wrong but are not
 - **The page draws its own tooltips** (`data-tip` plus `tooltips.js`), and uses no

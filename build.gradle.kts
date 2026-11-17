@@ -122,8 +122,30 @@ val testWebview = tasks.register<Exec>("testWebview") {
     outputs.upToDateWhen { false }
 }
 
+val installTestBrowser = tasks.register<Exec>("installTestBrowser") {
+    group = "webview"
+    description = "Downloads the Chromium the browser tests of the web view run in; a no-op once it is there."
+    dependsOn(npmInstall)
+    workingDir = webviewDir.asFile
+    // on a CI runner also the system libraries Chromium needs (installed with apt, which runners allow)
+    val withDeps = if (providers.environmentVariable("CI").isPresent) listOf("--with-deps") else emptyList()
+    commandLine(npm("exec", "--", "playwright", "install", *withDeps.toTypedArray(), "chromium"))
+}
+
+val e2eWebview = tasks.register<Exec>("e2eWebview") {
+    group = "verification"
+    description = "Runs the browser tests of the built web view (webview/e2e, Playwright)."
+    dependsOn(buildWebview, installTestBrowser)
+    workingDir = webviewDir.asFile
+    commandLine(npm("exec", "--", "playwright", "test"))
+    inputs.dir(webviewOut)
+    inputs.dir(webviewDir.dir("e2e"))
+    // like testWebview: a passing run prints its tests, an up-to-date one would print nothing
+    outputs.upToDateWhen { false }
+}
+
 tasks.check {
-    dependsOn(testWebview)
+    dependsOn(testWebview, e2eWebview)
 }
 
 sourceSets {
