@@ -55,6 +55,9 @@ dependencies {
 
 intellijPlatform {
     buildSearchableOptions = false
+    // Instrumentation only adds runtime @NotNull checks and compiles .form files (there are none),
+    // and its task still calls the Ant builder that Gradle 10 removes.
+    instrumentCode = false
 
     pluginConfiguration {
         version = providers.gradleProperty("pluginVersion")
