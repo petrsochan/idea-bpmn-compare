@@ -32,7 +32,17 @@ public final class CompareWithRevisionAction extends AnAction implements DumbAwa
             return;
         }
         FileEditorManager manager = FileEditorManager.getInstance(project);
-        manager.openFile(file, true);
+        openFile(manager, file);
         manager.setSelectedEditor(file, BpmnCompareEditorProvider.ID);
+    }
+
+    /**
+     * Deprecated in 2026.3 for the non-blocking {@code requestOpenFile(file, FileEditorOpenRequest)},
+     * which does not exist in 2026.2 - there {@code requestOpenFile} has another signature. Switch to
+     * it once pluginSinceBuild is 263 or later.
+     */
+    @SuppressWarnings("deprecation")
+    private static void openFile(FileEditorManager manager, VirtualFile file) {
+        manager.openFile(file, true);
     }
 }
