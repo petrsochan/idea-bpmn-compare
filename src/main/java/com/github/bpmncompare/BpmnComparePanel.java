@@ -25,6 +25,8 @@ import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.openapi.ui.popup.ListSeparator;
 import com.intellij.openapi.ui.popup.PopupStep;
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep;
+import com.intellij.dvcs.repo.VcsRepositoryManager;
+import com.intellij.dvcs.repo.VcsRepositoryMappingListener;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.VcsException;
@@ -198,6 +200,11 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         ApplicationManager.getApplication().getMessageBus().connect(this)
                 .subscribe(LafManagerListener.TOPIC, source -> pushTheme());
         subscribeToGitChanges();
+        // the quick repository lookup knows no repository until the IDE has mapped them, which right after
+        // start-up is later than the page loads - without this the history would stay "not under Git"
+        project.getMessageBus().connect(this).subscribe(VcsRepositoryManager.VCS_REPOSITORY_MAPPING_UPDATED,
+                (VcsRepositoryMappingListener) () -> ApplicationManager.getApplication()
+                        .invokeLater(this::pushHistoryAvailability, o -> disposed));
 
         reloadBothSides();
     }
