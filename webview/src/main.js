@@ -1,23 +1,30 @@
 import NavigatedViewer from 'bpmn-js/lib/NavigatedViewer';
 import { diff } from 'bpmn-js-differ';
-import { BpmnModdle } from 'bpmn-moddle';
-import { getBBox } from 'diagram-js/lib/util/Elements';
 
-import { KINDS, toChangeList } from './changes.js';
-import { changesToMarkdown, svgToPng, viewerToSvg } from './export.js';
-import { KIND_LABEL, describeAttrs, displayName, typeName } from './format.js';
-import { LAYOUT_TOLERANCE, dropMinorLayoutChanges } from './layout.js';
-import { chunkChanges } from './history.js';
-import { hiddenChanges, leadingKind } from './planes.js';
+import { createChangeList } from './change-list.js';
+import { toChangeList } from './changes.js';
+import { decorate, visibleKind } from './decorations.js';
+import { computeHistory, createElementMenu } from './element-menu.js';
+import { changesToMarkdown } from './export.js';
+import { createExportMenu } from './export-menu.js';
+import { createFilter } from './filter.js';
+import { sendToHost } from './host.js';
+import { dropMinorLayoutChanges } from './layout.js';
+import { createNavigation } from './navigation.js';
+import {
+  SIDES, canvasOf, collectFlowElements, createPane, elementOf, importInto, resizeAll, showMessage, viewOf
+} from './panes.js';
 import { createFullRepaint } from './repaint.js';
+import { createSync } from './sync.js';
+import { hideTip, installTooltips } from './tooltips.js';
+import { createZoom } from './zoom.js';
 
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-js.css';
 import './styles.css';
 
 /*
- * Left pane  = current working copy ("new" side of the diff).
- * Right pane = selected Git revision ("old" side of the diff).
+ * The diff view: wires the parts together, renders what the host sends and answers its calls.
  *
  * The host (IntelliJ plugin) drives this page through window.bpmnCompare.
  */
@@ -31,223 +38,69 @@ for (const type of [ 'pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydow
 window.addEventListener('resize', repaintFully);
 window.addEventListener('blur', repaintFully);
 
-const KIND_BADGE = { added: '+', removed: '−', changed: '✎', layout: '⇄' };
+installTooltips(repaintFully);
 
 const panes = {
-  left: createPane('left'),
-  right: createPane('right')
+  left: createPane('left', NavigatedViewer),
+  right: createPane('right', NavigatedViewer)
 };
 
-let syncEnabled = true;
-let applyingSync = false;
-let pendingSyncFrom = null;
-let currentChanges = [];
-
-const FILTER_KEY = 'bpmnCompare.visibleKinds';
-const visibleKinds = loadVisibleKinds();
-
-// ---------------------------------------------------------------------------
-// panes
-// ---------------------------------------------------------------------------
-
-function createPane(side) {
-  const root = document.getElementById('pane-' + side);
-  const canvasEl = root.querySelector('.canvas');
-
-  const pane = {
-    side,
-    root,
-    canvasEl,
-    labelEl: root.querySelector('.label'),
-    messageEl: root.querySelector('.message'),
-    ghostEl: root.querySelector('.ghost-cursor'),
-    viewer: new NavigatedViewer({ container: canvasEl }),
-    loaded: false
-  };
-
-  const eventBus = pane.viewer.get('eventBus');
-
-  eventBus.on('canvas.viewbox.changing', () => {
-    repaintFully();
-    scheduleViewSync(side);
-  });
-
-  eventBus.on('canvas.viewbox.changed', () => updateZoomControls());
-
-  // drilling into a collapsed subprocess (or back out through the breadcrumbs) on one side
-  eventBus.on('root.set', (event) => {
-    if (syncEnabled && !applyingSync) {
-      syncPlane(side, event.element.id);
-    }
-  });
-
-  eventBus.on('element.hover', (event) => {
-    if (syncEnabled) {
-      setSyncHover(other(side), event.element.id, true);
-    }
-  });
-
-  eventBus.on('element.out', (event) => setSyncHover(other(side), event.element.id, false));
+for (const pane of Object.values(panes)) {
+  pane.viewer.get('eventBus').on('canvas.viewbox.changing', repaintFully);
 
   // double-click opens the element in the XML editor; only the working copy has a document to open,
   // a past revision has none
-  eventBus.on('element.dblclick', (event) => {
-    if (side === 'left') {
-      sendToHost({ command: 'openXml', id: event.element.id });
-    }
-  });
-
-  // right-click: the element's history, read by the host from Git
-  eventBus.on('element.contextmenu', (event) => openElementMenu(side, event));
-
-  canvasEl.addEventListener('mousemove', (event) => {
-    if (syncEnabled) {
-      mirrorCursor(pane, event);
-    }
-  });
-
-  canvasEl.addEventListener('mouseleave', () => hideGhost(panes[other(side)]));
-
-  return pane;
-}
-
-function other(side) {
-  return side === 'left' ? 'right' : 'left';
-}
-
-// ---------------------------------------------------------------------------
-// tooltips
-// ---------------------------------------------------------------------------
-
-/*
- * Tooltips are drawn by this page, not by the browser.
- *
- * The view runs inside JCEF, where a native `title` tooltip never appears: CEF hands the tooltip to
- * the client through CefDisplayHandler#onTooltip, and JBCefClient only forwards that to display
- * handlers the plugin registers - nothing draws it. So every `title` in the top bar and on the
- * change badges was invisible. Elements carry `data-tip` instead and this shows it.
- *
- * `aria-disabled` rather than `disabled` for the same family of reasons: a disabled button receives
- * no pointer events at all, so it could not be hovered to explain why it does nothing.
- */
-
-const TIP_DELAY_MS = 400;
-const TIP_MARGIN = 6;
-
-let tipTimer = null;
-
-function tipElement() {
-  return document.getElementById('tip');
-}
-
-function showTip(target) {
-  const text = target.getAttribute('data-tip');
-
-  if (!text) {
-    return;
+  if (pane.side === 'left') {
+    pane.viewer.get('eventBus').on('element.dblclick', (event) => sendToHost({ command: 'openXml', id: event.element.id }));
   }
-
-  const tip = tipElement();
-
-  tip.textContent = text;
-  tip.hidden = false;
-
-  // measure only after the text is in, then keep the tip inside the window
-  const anchor = target.getBoundingClientRect();
-  const box = tip.getBoundingClientRect();
-  const left = Math.max(TIP_MARGIN,
-    Math.min(anchor.left + anchor.width / 2 - box.width / 2, window.innerWidth - box.width - TIP_MARGIN));
-  const below = anchor.bottom + TIP_MARGIN;
-  const top = below + box.height > window.innerHeight - TIP_MARGIN ? anchor.top - box.height - TIP_MARGIN : below;
-
-  tip.style.left = left + 'px';
-  tip.style.top = Math.max(TIP_MARGIN, top) + 'px';
 }
 
-function hideTip() {
-  clearTimeout(tipTimer);
-  tipElement().hidden = true;
-}
+window.addEventListener('resize', () => resizeAll(panes));
 
-// delegated, so badges and change list rows created later are covered too
-document.addEventListener('mouseover', (event) => {
-  const target = event.target.closest && event.target.closest('[data-tip]');
+/** The changes of the current diff, in change-list order. */
+let currentChanges = [];
 
-  if (!target) {
-    return;
-  }
+/** Labels of the two sides, kept for the markdown header. */
+let currentLabels = { left: '', right: '' };
 
-  clearTimeout(tipTimer);
-  tipTimer = setTimeout(() => {
-    showTip(target);
-    repaintFully();
-  }, TIP_DELAY_MS);
+const sync = createSync(panes);
+const zoom = createZoom(panes, sync);
+const filter = createFilter(redrawChanges);
+const changeList = createChangeList({
+  onPick: (id) => navigation.focusElement(id),
+  onToggle: () => resizeAll(panes)
 });
+const navigation = createNavigation({
+  panes,
+  sync,
+  visibleChanges,
+  onSelect: (id) => changeList.markSelected(id),
+  repaint: repaintFully
+});
+const exportMenu = createExportMenu({
+  panes,
 
-document.addEventListener('mouseout', (event) => {
-  if (event.target.closest && event.target.closest('[data-tip]')) {
+  // only what the user can see, so the export matches the change list on screen
+  markdown: () => changesToMarkdown(visibleChanges(), currentLabels)
+});
+const elementMenu = createElementMenu({
+  panes,
+  beforeOpen: () => {
+    exportMenu.close();
     hideTip();
   }
 });
 
-document.addEventListener('mousedown', hideTip);
-window.addEventListener('blur', hideTip);
-
-/** Sets an element's tooltip; an empty text removes it. */
-function setTip(element, text) {
-  if (text) {
-    element.setAttribute('data-tip', text);
-  } else {
-    element.removeAttribute('data-tip');
-  }
+/** Changes the user can actually see, in change-list order, so navigation and the chips agree. */
+function visibleChanges() {
+  return currentChanges.filter((change) => visibleKind(change, filter.kinds));
 }
 
-/** Greys a top-bar button out and gives it a tooltip saying why, without the `disabled` attribute. */
-function setBarButtonState(id, inactive, activeTitle, inactiveTitle) {
-  const button = document.getElementById(id);
-
-  button.setAttribute('aria-disabled', String(inactive));
-  setTip(button, inactive ? inactiveTitle : activeTitle);
-}
-
-/** Sends a message to the IDE. The bridge is absent until the host injects it, and in a plain browser. */
-function sendToHost(message) {
-  if (window.bpmnCompareHost) {
-    window.bpmnCompareHost(message);
-  }
-}
-
-function canvasOf(pane) {
-  return pane.viewer.get('canvas');
-}
-
-function showMessage(pane, text, isError) {
-  pane.messageEl.textContent = text || '';
-  pane.messageEl.classList.toggle('error', !!isError);
-}
-
-async function importInto(pane, spec) {
-  pane.labelEl.textContent = spec.label || '';
-  setTip(pane.labelEl, spec.label || '');
-
-  if (!spec.xml) {
-    pane.viewer.clear();
-    pane.loaded = false;
-    showMessage(pane, spec.error || spec.message || 'Nothing to show', !!spec.error);
-    return null;
-  }
-
-  try {
-    await pane.viewer.importXML(spec.xml);
-    pane.loaded = true;
-    showMessage(pane, '');
-    return pane.viewer.getDefinitions();
-  } catch (err) {
-    pane.viewer.clear();
-    pane.loaded = false;
-    showMessage(pane, 'Cannot render diagram:\n' + (err && err.message || err), true);
-    return null;
-  }
+/** Everything that depends on which kinds the filter shows. */
+function redrawChanges() {
+  decorate(panes, currentChanges, filter.kinds);
+  changeList.render(currentChanges, filter.kinds, navigation.selectedId);
+  navigation.updateButtons();
 }
 
 // ---------------------------------------------------------------------------
@@ -286,15 +139,13 @@ async function pump() {
   rendering = false;
 }
 
-async function render(payload) {
+function render(payload) {
   const previousView = payload.preserveView ? {
     left: panes.left.loaded ? viewOf(panes.left) : null,
     right: panes.right.loaded ? viewOf(panes.right) : null
   } : null;
 
-  applyingSync = true;
-
-  try {
+  return sync.quietly(async () => {
     const [ newDefs, oldDefs ] = await Promise.all([
       importInto(panes.left, payload.left || {}),
       importInto(panes.right, payload.right || {})
@@ -322,46 +173,24 @@ async function render(payload) {
       panes.right.loaded ? collectFlowElements(panes.right) : {});
 
     // the change we were stepping on may not exist any more
-    selectedChangeId = currentChanges.some((change) => change.id === selectedChangeId) ? selectedChangeId : null;
+    navigation.retainSelection(currentChanges);
 
-    decorate(currentChanges);
-    renderSummary(currentChanges, newDefs, oldDefs);
-    renderChangeList(currentChanges);
+    changeList.renderSummary(currentChanges, newDefs, oldDefs);
+    redrawChanges();
 
     restoreOrFit(previousView);
 
     // a diff window opened from the element history shows the element it was opened for
     if (payload.focus) {
-      focusElement(payload.focus);
+      navigation.focusElement(payload.focus);
     }
-    updateZoomControls();
-    updateChangeNav();
-  } finally {
-    applyingSync = false;
-  }
-}
-
-function collectFlowElements(pane) {
-  const result = {};
-
-  pane.viewer.get('elementRegistry').forEach((element) => {
-    if (element.businessObject && element.type !== 'label' && element.parent) {
-      result[element.id] = element.businessObject;
-    }
+    zoom.updateControls();
+    navigation.updateButtons();
   });
-
-  return result;
-}
-
-/** Viewbox plus the plane it belongs to, to come back to after a re-render. */
-function viewOf(pane) {
-  const canvas = canvasOf(pane);
-
-  return { ...canvas.viewbox(), rootId: canvas.getRootElement().id };
 }
 
 function restoreOrFit(previousView) {
-  for (const side of [ 'left', 'right' ]) {
+  for (const side of SIDES) {
     const pane = panes[side];
 
     if (!pane.loaded) {
@@ -375,7 +204,7 @@ function restoreOrFit(previousView) {
 
     if (view) {
       // the subprocess may have been deleted meanwhile - then the top-level plane stays
-      const root = view.rootId && pane.viewer.get('elementRegistry').get(view.rootId);
+      const root = view.rootId && elementOf(pane, view.rootId);
 
       if (root) {
         canvas.setRootElement(root);
@@ -388,663 +217,8 @@ function restoreOrFit(previousView) {
   }
 
   // with sync on, start both sides from the same viewport
-  if (syncEnabled && panes.left.loaded && panes.right.loaded && !(previousView && previousView.left)) {
-    copyViewbox(panes.left, panes.right);
-  }
-}
-
-/** Sides a change kind is drawn on. */
-function sidesFor(kind) {
-  if (kind === 'added') {
-    return [ 'left' ];
-  }
-
-  if (kind === 'removed') {
-    return [ 'right' ];
-  }
-
-  return [ 'left', 'right' ];
-}
-
-/** Kind the element is shown as: the most important kind that is not filtered out. */
-function visibleKind(change) {
-  return KINDS.find((k) => change.kinds.has(k) && visibleKinds.has(k));
-}
-
-function clearDecorations() {
-  for (const pane of Object.values(panes)) {
-    if (!pane.loaded) {
-      continue;
-    }
-
-    const canvas = canvasOf(pane);
-
-    pane.viewer.get('elementRegistry').forEach((element) => {
-      for (const kind of KINDS) {
-        for (const marker of [ 'diff-' + kind, 'diff-nested-' + kind ]) {
-          if (canvas.hasMarker(element, marker)) {
-            canvas.removeMarker(element, marker);
-          }
-        }
-      }
-    });
-
-    pane.viewer.get('overlays').remove({ type: 'diff' });
-  }
-}
-
-function decorate(changeList) {
-  clearDecorations();
-
-  for (const change of changeList) {
-    for (const kind of change.kinds) {
-      if (!visibleKinds.has(kind)) {
-        continue;
-      }
-
-      for (const side of sidesFor(kind)) {
-        const pane = panes[side];
-
-        if (!pane.loaded) {
-          continue;
-        }
-
-        const element = pane.viewer.get('elementRegistry').get(change.id);
-
-        if (!element) {
-          continue;
-        }
-
-        canvasOf(pane).addMarker(element, 'diff-' + kind);
-      }
-    }
-
-    // one badge per element and side, showing the most important visible kind
-    const kind = visibleKind(change);
-
-    if (kind) {
-      for (const side of sidesFor(kind)) {
-        addBadge(panes[side], change, kind);
-      }
-    }
-  }
-
-  for (const pane of Object.values(panes)) {
-    markHiddenChanges(pane, changeList);
-  }
-}
-
-function addBadge(pane, change, kind) {
-  const element = pane.loaded && pane.viewer.get('elementRegistry').get(change.id);
-
-  if (!element) {
-    return;
-  }
-
-  const badge = document.createElement('span');
-  badge.className = 'diff-badge ' + kind;
-  badge.textContent = KIND_BADGE[kind];
-
-  const details = describeAttrs(change.attrs);
-  setTip(badge, [ ...change.kinds ].map((k) => KIND_LABEL[k]).join(', ') + ': ' + displayName(change)
-    + (details ? '\n\n' + details : ''));
-
-  try {
-    pane.viewer.get('overlays').add(change.id, 'diff', {
-      position: badgePosition(element),
-      html: badge
-    });
-  } catch (err) {
-
-    // some elements (e.g. the root) cannot carry overlays
-  }
-}
-
-// ---------------------------------------------------------------------------
-// planes (collapsed subprocesses)
-// ---------------------------------------------------------------------------
-
-/** Id of the plane an element is drawn on, or undefined if the pane does not have it. */
-function rootIdOf(pane, id) {
-  const element = pane.viewer.get('elementRegistry').get(id);
-  const root = element && canvasOf(pane).findRoot(element);
-
-  return root ? root.id : undefined;
-}
-
-/**
- * Id of the collapsed subprocess shape that opens a plane, or undefined for a top-level plane.
- *
- * The plane of subprocess `Sub_1` is the root `Sub_1_plane` sharing its business object, so the
- * shape is the registry entry under the business object's id - for a process plane that entry is
- * the root itself.
- */
-function shapeIdOfRoot(pane, rootId) {
-  const registry = pane.viewer.get('elementRegistry');
-  const root = registry.get(rootId);
-  const shape = root && root.businessObject && registry.get(root.businessObject.id);
-
-  return shape && shape !== root ? shape.id : undefined;
-}
-
-/** Switches the pane to the plane the element is drawn on; nothing happens if it is already shown. */
-function showPlaneOf(pane, element) {
-  const canvas = canvasOf(pane);
-  const root = canvas.findRoot(element);
-
-  if (root) {
-    canvas.setRootElement(root);
-  }
-}
-
-/**
- * Marks each collapsed subprocess that hides visible changes of this pane: a dashed outline and a
- * count, both in the colour of the most important kind inside. Dashed, so it does not read as a
- * change of the subprocess itself.
- */
-function markHiddenChanges(pane, changeList) {
-  if (!pane.loaded) {
-    return;
-  }
-
-  const drawn = [];
-
-  for (const change of changeList) {
-    const kind = visibleKind(change);
-
-    if (kind && sidesFor(kind).includes(pane.side)) {
-      drawn.push({ id: change.id, kind });
-    }
-  }
-
-  const hidden = hiddenChanges(drawn, (id) => rootIdOf(pane, id), (rootId) => shapeIdOfRoot(pane, rootId));
-
-  for (const [ shapeId, byKind ] of hidden) {
-    const kind = leadingKind(byKind);
-    const count = [ ...byKind.values() ].reduce((sum, n) => sum + n, 0);
-    const breakdown = KINDS.filter((k) => byKind.has(k)).map((k) => byKind.get(k) + ' ' + KIND_LABEL[k].toLowerCase());
-
-    canvasOf(pane).addMarker(shapeId, 'diff-nested-' + kind);
-
-    const badge = document.createElement('span');
-    badge.className = 'diff-badge nested ' + kind;
-    badge.textContent = String(count);
-    setTip(badge, (count === 1 ? '1 change' : count + ' changes') + ' inside this subprocess: '
-      + breakdown.join(', ') + '\n\nOpen it with the drill-down button, or step to it with F7.');
-
-    try {
-      // bottom left: the top right carries the subprocess's own badge, the bottom right the drill-down button
-      pane.viewer.get('overlays').add(shapeId, 'diff', { position: { bottom: 8, left: -8 }, html: badge });
-    } catch (err) {
-
-      // the shape cannot carry an overlay
-    }
-  }
-}
-
-/** Top-right corner for shapes, middle of the path for connections. */
-function badgePosition(element) {
-  if (!element.waypoints) {
-    return { top: -8, right: 8 };
-  }
-
-  const bbox = getBBox(element);
-  const mid = pathMiddle(element.waypoints);
-
-  return { left: mid.x - bbox.x - 8, top: mid.y - bbox.y - 8 };
-}
-
-function pathMiddle(waypoints) {
-  const segments = [];
-  let total = 0;
-
-  for (let i = 1; i < waypoints.length; i++) {
-    const length = Math.hypot(waypoints[i].x - waypoints[i - 1].x, waypoints[i].y - waypoints[i - 1].y);
-    segments.push(length);
-    total += length;
-  }
-
-  let remaining = total / 2;
-
-  for (let i = 0; i < segments.length; i++) {
-    if (remaining <= segments[i] && segments[i] > 0) {
-      const t = remaining / segments[i];
-      const a = waypoints[i], b = waypoints[i + 1];
-
-      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-    }
-
-    remaining -= segments[i];
-  }
-
-  return waypoints[0];
-}
-
-function renderSummary(changeList, newDefs, oldDefs) {
-  const counts = { added: 0, removed: 0, changed: 0, layout: 0 };
-
-  for (const change of changeList) {
-    counts[change.kind]++;
-  }
-
-  for (const kind of KINDS) {
-    document.querySelector('.chip.' + kind + ' b').textContent = counts[kind];
-  }
-
-  let note = '';
-
-  if (newDefs && oldDefs && !changeList.length) {
-    note = 'No differences';
-  } else if (!newDefs || !oldDefs) {
-    note = changeList.length ? '' : 'Comparison not available';
-  }
-
-  document.getElementById('summary-note').textContent = note;
-}
-
-function renderChangeList(changeList) {
-  const list = document.getElementById('change-list');
-  list.textContent = '';
-
-  const shown = changeList.filter(visibleKind);
-
-  if (!shown.length) {
-    const li = document.createElement('li');
-    li.className = 'empty';
-    li.textContent = changeList.length ? 'All changes are hidden by the filter.' : 'No changes.';
-    list.appendChild(li);
-    return;
-  }
-
-  for (const change of shown) {
-    const li = document.createElement('li');
-
-    const kind = document.createElement('span');
-    kind.className = 'kind ' + visibleKind(change);
-    kind.textContent = [ ...change.kinds ].map((k) => KIND_LABEL[k]).join(' + ');
-
-    const name = document.createElement('span');
-    name.textContent = displayName(change);
-    setTip(name, change.id);
-
-    const type = document.createElement('span');
-    type.className = 'type';
-    type.textContent = typeName(change);
-
-    li.append(kind, name, type);
-
-    const details = describeAttrs(change.attrs);
-
-    if (details) {
-      const attrs = document.createElement('span');
-      attrs.className = 'attrs';
-      attrs.textContent = details;
-      li.append(document.createElement('span'), attrs);
-    }
-
-    li.dataset.changeId = change.id;
-    li.addEventListener('click', () => focusElement(change.id));
-    list.appendChild(li);
-  }
-
-  markSelectedRow(selectedChangeId);
-}
-
-/** Shows in the change list which change stepping is on, so F7 is not a blind jump. */
-function markSelectedRow(id) {
-  for (const li of document.querySelectorAll('#change-list li[data-change-id]')) {
-    li.classList.toggle('selected', li.dataset.changeId === id);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// navigation
-// ---------------------------------------------------------------------------
-
-/** Where stepping through changes currently is; also the highlighted row of the change list. */
-let selectedChangeId = null;
-
-/** Changes the user can actually see, in change-list order, so navigation and the chips agree. */
-function navigableChanges() {
-  return currentChanges.filter(visibleKind);
-}
-
-/** Steps to the next (+1) or previous (-1) visible change, wrapping around. */
-function goToChange(step) {
-  const changes = navigableChanges();
-
-  if (!changes.length) {
-    return;
-  }
-
-  const current = changes.findIndex((change) => change.id === selectedChangeId);
-  const next = current < 0
-    ? (step > 0 ? 0 : changes.length - 1)
-    : (current + step + changes.length) % changes.length;
-
-  focusElement(changes[next].id);
-}
-
-/** Selects and centres an element, driven by the caret position in the XML editor. */
-function selectElement(id) {
-  if (id && (panes.left.loaded || panes.right.loaded)) {
-    focusElement(id);
-  }
-}
-
-function updateChangeNav() {
-  const inactive = !navigableChanges().length;
-
-  setBarButtonState('change-prev', inactive, 'Previous change (Shift+F7)', 'No change to step to');
-  setBarButtonState('change-next', inactive, 'Next change (F7)', 'No change to step to');
-}
-
-function focusElement(id) {
-  selectedChangeId = id;
-  markSelectedRow(id);
-
-  const targets = [ 'left', 'right' ]
-    .map((side) => panes[side])
-    .filter((pane) => pane.loaded && pane.viewer.get('elementRegistry').get(id));
-
-  if (!targets.length) {
-    return;
-  }
-
-  // a change inside a collapsed subprocess is drawn on the subprocess's own plane - show that one
-  // first, or centring scrolls to coordinates of a plane nobody sees. The panes may need different
-  // planes (the element moved into or out of a subprocess), so the plane sync must not make them
-  // drag each other back and forth.
-  const wasApplying = applyingSync;
-
-  applyingSync = true;
-
-  try {
-    for (const pane of targets) {
-      showPlaneOf(pane, pane.viewer.get('elementRegistry').get(id));
-    }
-
-    // an element on one side only: the other side follows into that plane if it has it
-    if (syncEnabled && targets.length === 1) {
-      syncPlane(targets[0].side, canvasOf(targets[0]).getRootElement().id);
-    }
-  } finally {
-    applyingSync = wasApplying;
-  }
-
-  // centering one side is enough only while both show the same plane - the other one follows;
-  // on different planes the coordinates are unrelated, so each side is centred on its own
-  const together = syncEnabled && panes.left.loaded && panes.right.loaded && onSamePlane(panes.left, panes.right);
-  const toCenter = together ? targets.slice(0, 1) : targets;
-
-  for (const pane of toCenter) {
-    centerOn(pane, pane.viewer.get('elementRegistry').get(id));
-  }
-
-  if (together) {
-    copyViewbox(toCenter[0], panes[other(toCenter[0].side)]);
-  }
-
-  for (const pane of targets) {
-    const canvas = canvasOf(pane);
-    canvas.addMarker(id, 'diff-focus');
-    setTimeout(() => {
-      if (canvas.hasMarker(id, 'diff-focus')) {
-        canvas.removeMarker(id, 'diff-focus');
-        repaintFully();
-      }
-    }, 1500);
-  }
-}
-
-function centerOn(pane, element) {
-  const canvas = canvasOf(pane);
-  const viewbox = canvas.viewbox();
-  const bbox = getBBox(element);
-
-  canvas.viewbox({
-    x: bbox.x + bbox.width / 2 - viewbox.width / 2,
-    y: bbox.y + bbox.height / 2 - viewbox.height / 2,
-    width: viewbox.width,
-    height: viewbox.height
-  });
-}
-
-// ---------------------------------------------------------------------------
-// zoom
-// ---------------------------------------------------------------------------
-
-const ZOOM_STEP = 1.2;
-const ZOOM_MIN = 0.2;
-const ZOOM_MAX = 4;
-
-function loadedPanes() {
-  return [ 'left', 'right' ].map((side) => panes[side]).filter((pane) => pane.loaded);
-}
-
-/**
- * Runs a zoom action on the diagrams. With sync on and both sides on the same plane, zooming one side
- * is enough - the other follows, so both keep showing the same region; otherwise each side zooms
- * around its own centre.
- */
-function applyZoom(action) {
-  const loaded = loadedPanes();
-
-  if (!loaded.length) {
-    return;
-  }
-
-  const together = syncEnabled && loaded.length === 2 && onSamePlane(loaded[0], loaded[1]);
-  const targets = together ? loaded.slice(0, 1) : loaded;
-
-  for (const pane of targets) {
-    action(canvasOf(pane));
-  }
-
-  if (together) {
-    copyViewbox(targets[0], panes[other(targets[0].side)]);
-  }
-
-  updateZoomControls();
-}
-
-function zoomBy(factor) {
-  applyZoom((canvas) => {
-    const level = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, canvas.zoom() * factor));
-
-    // no centre argument -> diagram-js zooms around the middle of the viewport
-    canvas.zoom(level);
-  });
-}
-
-function zoomTo(level) {
-  applyZoom((canvas) => canvas.zoom(level));
-}
-
-function zoomFit() {
-  applyZoom((canvas) => canvas.zoom('fit-viewport', 'auto'));
-}
-
-/** Zoom level shown in the toolbar - the left pane leads, the right one stands in when it is empty. */
-function currentZoom() {
-  const pane = loadedPanes()[0];
-
-  return pane ? canvasOf(pane).zoom() : null;
-}
-
-const ZOOM_TITLES = {
-  'zoom-out': 'Zoom out',
-  'zoom-in': 'Zoom in',
-  'zoom-reset': 'Reset zoom to 100%',
-  'zoom-fit': 'Fit the diagram into the window'
-};
-
-function updateZoomControls() {
-  const zoom = currentZoom();
-
-  document.getElementById('zoom-reset').textContent = zoom ? Math.round(zoom * 100) + '%' : '—';
-
-  for (const [ id, title ] of Object.entries(ZOOM_TITLES)) {
-    setBarButtonState(id, !zoom, title, 'No diagram loaded');
-  }
-}
-
-document.getElementById('zoom-out').addEventListener('click', () => zoomBy(1 / ZOOM_STEP));
-document.getElementById('zoom-in').addEventListener('click', () => zoomBy(ZOOM_STEP));
-document.getElementById('zoom-reset').addEventListener('click', () => zoomTo(1));
-document.getElementById('zoom-fit').addEventListener('click', () => zoomFit());
-
-updateZoomControls();
-updateChangeNav();
-
-// ---------------------------------------------------------------------------
-// synchronization
-// ---------------------------------------------------------------------------
-
-function scheduleViewSync(fromSide) {
-  if (!syncEnabled || applyingSync || pendingSyncFrom) {
-    return;
-  }
-
-  // 'changing' fires before the new viewbox is applied - read it on the next frame
-  pendingSyncFrom = fromSide;
-
-  requestAnimationFrame(() => {
-    const from = pendingSyncFrom;
-    pendingSyncFrom = null;
-
-    if (syncEnabled && !applyingSync) {
-      copyViewbox(panes[from], panes[other(from)]);
-    }
-  });
-}
-
-/** Both panes show the same plane, so the same coordinates mean the same place. */
-function onSamePlane(a, b) {
-  return canvasOf(a).getRootElement().id === canvasOf(b).getRootElement().id;
-}
-
-function copyViewbox(fromPane, toPane) {
-  if (!fromPane.loaded || !toPane.loaded) {
-    return;
-  }
-
-  // coordinates of different planes are unrelated places
-  if (!onSamePlane(fromPane, toPane)) {
-    return;
-  }
-
-  const { x, y, width, height } = canvasOf(fromPane).viewbox();
-  const wasApplying = applyingSync;
-
-  applyingSync = true;
-
-  try {
-    canvasOf(toPane).viewbox({ x, y, width, height });
-  } finally {
-    applyingSync = wasApplying;
-  }
-}
-
-/**
- * Shows the plane `rootId` on the other side too. A subprocess that exists on one side only leaves
- * the other side where it is - there is nothing to show.
- *
- * The viewbox is copied right away: bpmn-js has already moved the source pane to its position on
- * the new plane, and does not always scroll it, so the usual scroll-driven sync cannot be relied on.
- */
-function syncPlane(fromSide, rootId) {
-  const toPane = panes[other(fromSide)];
-
-  if (!toPane.loaded) {
-    return;
-  }
-
-  const root = toPane.viewer.get('elementRegistry').get(rootId);
-
-  if (!root) {
-    return;
-  }
-
-  const wasApplying = applyingSync;
-
-  applyingSync = true;
-
-  try {
-    canvasOf(toPane).setRootElement(root);
-    copyViewbox(panes[fromSide], toPane);
-  } finally {
-    applyingSync = wasApplying;
-  }
-}
-
-function mirrorCursor(fromPane, event) {
-  const toPane = panes[other(fromPane.side)];
-
-  // on different planes the same coordinates mean unrelated places
-  if (!fromPane.loaded || !toPane.loaded || !onSamePlane(fromPane, toPane)) {
-    hideGhost(toPane);
-    return;
-  }
-
-  const fromRect = fromPane.canvasEl.getBoundingClientRect();
-  const fromBox = canvasOf(fromPane).viewbox();
-
-  // screen -> diagram coordinates
-  const diagramX = fromBox.x + (event.clientX - fromRect.left) / fromBox.scale;
-  const diagramY = fromBox.y + (event.clientY - fromRect.top) / fromBox.scale;
-
-  // diagram -> screen coordinates of the other pane
-  const toBox = canvasOf(toPane).viewbox();
-  const x = (diagramX - toBox.x) * toBox.scale;
-  const y = (diagramY - toBox.y) * toBox.scale;
-
-  const inside = x >= 0 && y >= 0 && x <= toPane.canvasEl.clientWidth && y <= toPane.canvasEl.clientHeight;
-
-  if (!inside) {
-    hideGhost(toPane);
-    return;
-  }
-
-  // the ghost is positioned relative to the pane, the canvas starts below the header
-  const offsetTop = toPane.canvasEl.offsetTop;
-
-  toPane.ghostEl.style.transform = 'translate(' + x + 'px,' + (y + offsetTop) + 'px)';
-  toPane.ghostEl.classList.add('visible');
-}
-
-function hideGhost(pane) {
-  pane.ghostEl.classList.remove('visible');
-}
-
-function setSyncHover(side, id, on) {
-  const pane = panes[side];
-
-  if (!pane.loaded || !pane.viewer.get('elementRegistry').get(id)) {
-    return;
-  }
-
-  const canvas = canvasOf(pane);
-
-  if (on) {
-    canvas.addMarker(id, 'sync-hover');
-  } else if (canvas.hasMarker(id, 'sync-hover')) {
-    canvas.removeMarker(id, 'sync-hover');
-  }
-}
-
-function setSync(enabled) {
-  syncEnabled = !!enabled;
-
-  if (syncEnabled) {
-    if (panes.left.loaded) {
-      syncPlane('left', canvasOf(panes.left).getRootElement().id);
-    }
-
-    copyViewbox(panes.left, panes.right);
-  } else {
-    hideGhost(panes.left);
-    hideGhost(panes.right);
+  if (sync.enabled && panes.left.loaded && panes.right.loaded && !(previousView && previousView.left)) {
+    sync.copyViewbox(panes.left, panes.right);
   }
 }
 
@@ -1056,185 +230,25 @@ function setTheme(theme) {
   const root = document.documentElement;
   root.dataset.theme = theme && theme.dark ? 'dark' : 'light';
 
-  if (theme && theme.bg) {
-    root.style.setProperty('--bg', theme.bg);
-  }
-
-  if (theme && theme.fg) {
-    root.style.setProperty('--fg', theme.fg);
-  }
-
-  if (theme && theme.border) {
-    root.style.setProperty('--border', theme.border);
+  for (const name of [ 'bg', 'fg', 'border' ]) {
+    if (theme && theme[name]) {
+      root.style.setProperty('--' + name, theme[name]);
+    }
   }
 }
 
 function setStatus(side, text, isError) {
   const pane = panes[side];
 
-  if (!pane) {
-    return;
-  }
-
-  if (!pane.loaded || isError) {
+  if (pane && (!pane.loaded || isError)) {
     showMessage(pane, text, isError);
   }
 }
 
-function resizeAll() {
-  for (const pane of Object.values(panes)) {
-    if (pane.loaded) {
-      canvasOf(pane).resized();
-    }
-  }
-}
-
-window.addEventListener('resize', resizeAll);
-
-// ---------------------------------------------------------------------------
-// filter
-// ---------------------------------------------------------------------------
-
-function loadVisibleKinds() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(FILTER_KEY));
-
-    if (Array.isArray(stored)) {
-      return new Set(stored.filter((k) => KINDS.includes(k)));
-    }
-  } catch (err) {
-
-    // storage unavailable - fall back to showing everything
-  }
-
-  return new Set(KINDS);
-}
-
-function saveVisibleKinds() {
-  try {
-    localStorage.setItem(FILTER_KEY, JSON.stringify([ ...visibleKinds ]));
-  } catch (err) {
-
-    // not persisted, filter still works for this session
-  }
-}
-
-function updateFilterChips() {
-  for (const chip of document.querySelectorAll('#summary .chip')) {
-    const on = visibleKinds.has(chip.dataset.kind);
-    chip.classList.toggle('off', !on);
-    chip.setAttribute('aria-pressed', String(on));
-    const kind = chip.dataset.kind;
-    setTip(chip, (on ? 'Hide ' : 'Show ') + KIND_LABEL[kind].toLowerCase() + ' elements'
-      + (kind === 'layout' ? ' (shifts of up to ' + LAYOUT_TOLERANCE + ' px are ignored)' : ''));
-  }
-}
-
-function setVisibleKinds(kinds) {
-  visibleKinds.clear();
-  kinds.filter((k) => KINDS.includes(k)).forEach((k) => visibleKinds.add(k));
-  saveVisibleKinds();
-  updateFilterChips();
-  decorate(currentChanges);
-  renderChangeList(currentChanges);
-  updateChangeNav();
-}
-
-for (const chip of document.querySelectorAll('#summary .chip')) {
-  chip.addEventListener('click', () => {
-    const kind = chip.dataset.kind;
-    const next = new Set(visibleKinds);
-
-    if (next.has(kind)) {
-      next.delete(kind);
-    } else {
-      next.add(kind);
-    }
-
-    setVisibleKinds([ ...next ]);
-  });
-}
-
-updateFilterChips();
-
-document.getElementById('toggle-changes').addEventListener('click', () => setChangeListVisible(isChangeListHidden()));
-
-function isChangeListHidden() {
-  return document.getElementById('changes').hidden;
-}
-
-function setChangeListVisible(visible) {
-  document.getElementById('changes').hidden = !visible;
-  document.getElementById('toggle-changes').classList.toggle('active', visible);
-  updateChangeListTooltip();
-  resizeAll();
-}
-
-/** The tooltip follows the state, the way the filter chips do. */
-function updateChangeListTooltip() {
-  setTip(document.getElementById('toggle-changes'), isChangeListHidden()
-    ? 'Show the list of all changes; click an entry to centre that element'
-    : 'Hide the list of changes (Escape)');
-}
-
-updateChangeListTooltip();
-
-// ---------------------------------------------------------------------------
-// export
-// ---------------------------------------------------------------------------
-
-/** Labels of the two sides, kept for the markdown header. */
-let currentLabels = { left: '', right: '' };
-
-const exportMenu = document.getElementById('export-menu');
-
-document.getElementById('export').addEventListener('click', (event) => {
-  event.stopPropagation();
-  exportMenu.hidden = !exportMenu.hidden;
-  document.getElementById('export').classList.toggle('active', !exportMenu.hidden);
-});
-
 document.addEventListener('click', () => {
-  closeExportMenu();
-  closeElementMenu();
+  exportMenu.close();
+  elementMenu.close();
 });
-
-for (const item of exportMenu.querySelectorAll('li')) {
-  item.addEventListener('click', async () => {
-    closeExportMenu();
-
-    try {
-      await runExport(item.dataset.command);
-    } catch (err) {
-      console.error('[bpmn-compare] export failed', err);
-      sendToHost({ command: 'exportFailed', payload: String(err && err.message || err) });
-    }
-  });
-}
-
-function closeExportMenu() {
-  exportMenu.hidden = true;
-  document.getElementById('export').classList.remove('active');
-}
-
-async function runExport(command) {
-  if (command === 'copyMarkdown') {
-    // only what the user can see, so the export matches the change list on screen
-    sendToHost({ command, payload: changesToMarkdown(navigableChanges(), currentLabels) });
-    return;
-  }
-
-  if (!panes.left.loaded) {
-    return;
-  }
-
-  const svg = await viewerToSvg(panes.left.viewer);
-
-  sendToHost({ command, payload: command === 'savePng' ? await svgToPng(svg) : svg });
-}
-
-document.getElementById('change-prev').addEventListener('click', () => goToChange(-1));
-document.getElementById('change-next').addEventListener('click', () => goToChange(1));
 
 document.addEventListener('keydown', (event) => {
   if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
@@ -1243,129 +257,27 @@ document.addEventListener('keydown', (event) => {
 
   if (event.key === 'F7') {
     event.preventDefault();
-    goToChange(event.shiftKey ? -1 : 1);
-  } else if (event.key === 'Escape' && !elementMenu.hidden) {
+    navigation.goToChange(event.shiftKey ? -1 : 1);
+  } else if (event.key === 'Escape' && elementMenu.isOpen()) {
     event.preventDefault();
-    closeElementMenu();
-  } else if (event.key === 'Escape' && !isChangeListHidden()) {
+    elementMenu.close();
+  } else if (event.key === 'Escape' && !changeList.isHidden()) {
     event.preventDefault();
-    setChangeListVisible(false);
+    changeList.setVisible(false);
   }
 });
-
-// ---------------------------------------------------------------------------
-// element history
-// ---------------------------------------------------------------------------
-
-const elementMenu = document.getElementById('element-menu');
-const historyItem = document.getElementById('element-history');
-
-/** Per pane: whether the host can read the history; until it says so, there is no menu at all. */
-let historyState = {};
-let menuTarget = null;
-const historyModdle = new BpmnModdle();
-
-/**
- * @param state `{ left: { available, reason }, right: { available, reason } }` - each pane reads the
- *   history of its own file, and in a diff of two files those are different files
- */
-function setHistoryAvailable(state) {
-  historyState = {};
-
-  for (const side of [ 'left', 'right' ]) {
-    const sideState = state && state[side];
-
-    historyState[side] = { available: !!(sideState && sideState.available), reason: sideState && sideState.reason || '' };
-  }
-}
-
-function openElementMenu(side, event) {
-  const original = event.originalEvent;
-  const element = event.element.type === 'label' && event.element.labelTarget ? event.element.labelTarget : event.element;
-
-  if (original) {
-    original.preventDefault();
-  }
-
-  // the plane itself (a process, a subprocess drilled into) is not an element of the diagram
-  const state = historyState[side];
-
-  if (!element.parent || !element.businessObject || !state || (!state.available && !state.reason) || !original) {
-    return;
-  }
-
-  closeExportMenu();
-  hideTip();
-
-  const name = (element.businessObject.name || '').trim() || element.id;
-
-  // strings only: the host reads flat objects of string values
-  menuTarget = { id: element.id, name, side, x: String(Math.round(original.clientX)), y: String(Math.round(original.clientY)) };
-  historyItem.textContent = 'History of "' + name + '"';
-  historyItem.setAttribute('aria-disabled', String(!state.available));
-  setTip(historyItem, state.available ? 'Commits that changed this element' : state.reason);
-
-  elementMenu.hidden = false;
-
-  const box = elementMenu.getBoundingClientRect();
-
-  elementMenu.style.left = Math.max(0, Math.min(original.clientX, window.innerWidth - box.width - 4)) + 'px';
-  elementMenu.style.top = Math.max(0, Math.min(original.clientY, window.innerHeight - box.height - 4)) + 'px';
-}
-
-function closeElementMenu() {
-  elementMenu.hidden = true;
-}
-
-historyItem.addEventListener('click', (event) => {
-  event.stopPropagation();
-
-  if (historyItem.getAttribute('aria-disabled') === 'true') {
-    return;
-  }
-
-  closeElementMenu();
-  sendToHost({ command: 'elementHistory', ...menuTarget });
-});
-
-window.addEventListener('blur', closeElementMenu);
-
-for (const pane of Object.values(panes)) {
-  pane.viewer.get('eventBus').on('canvas.viewbox.changing', closeElementMenu);
-}
-
-/**
- * Works out which of the given commits changed the element, one after the other so the page stays
- * responsive, and answers the host exactly once per call - the host waits for that answer.
- *
- * The host reads flat objects of string values only, so the entries travel as one string: entries
- * separated by U+001E, fields (hash, comma-separated kinds, summary) by U+001F. Neither can occur
- * inside a field - ids and kinds never contain them, and the summary quotes values with
- * JSON.stringify, which escapes every control character.
- */
-async function computeHistory({ token, id, blobs, commits }) {
-  try {
-    const entries = (await chunkChanges(id, blobs || {}, commits || [], historyModdle))
-      .map((entry) => [ entry.hash, entry.kinds.join(','), entry.summary ].join('\u001f'));
-
-    sendToHost({ command: 'historyChunk', token, entries: entries.join('\u001e') });
-  } catch (err) {
-    console.error('[bpmn-compare] history failed', err);
-    sendToHost({ command: 'historyChunk', token, error: String(err && err.message || err) });
-  }
-}
 
 const hostApi = {
   setDiagrams,
-  setHistoryAvailable,
+  setHistoryAvailable: elementMenu.setHistoryAvailable,
   computeHistory,
-  setSync,
+  setSync: sync.setEnabled,
   setTheme,
   setStatus,
-  setVisibleKinds,
-  focusElement,
-  goToChange,
-  selectElement
+  setVisibleKinds: filter.set,
+  focusElement: navigation.focusElement,
+  goToChange: navigation.goToChange,
+  selectElement: navigation.selectElement
 };
 
 // whatever the host asks for may change the picture

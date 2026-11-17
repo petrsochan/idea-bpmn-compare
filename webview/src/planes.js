@@ -49,3 +49,40 @@ export function hiddenChanges(changes, rootOf, shapeOfRoot) {
 export function leadingKind(byKind) {
   return KINDS.find((kind) => byKind.has(kind));
 }
+
+// ---------------------------------------------------------------------------
+// planes of a pane
+// ---------------------------------------------------------------------------
+
+/** Id of the plane an element is drawn on, or undefined if the pane does not have it. */
+export function rootIdOf(pane, id) {
+  const element = pane.viewer.get('elementRegistry').get(id);
+  const root = element && pane.viewer.get('canvas').findRoot(element);
+
+  return root ? root.id : undefined;
+}
+
+/**
+ * Id of the collapsed subprocess shape that opens a plane, or undefined for a top-level plane.
+ *
+ * The plane of subprocess `Sub_1` is the root `Sub_1_plane` sharing its business object, so the
+ * shape is the registry entry under the business object's id - for a process plane that entry is
+ * the root itself.
+ */
+export function shapeIdOfRoot(pane, rootId) {
+  const registry = pane.viewer.get('elementRegistry');
+  const root = registry.get(rootId);
+  const shape = root && root.businessObject && registry.get(root.businessObject.id);
+
+  return shape && shape !== root ? shape.id : undefined;
+}
+
+/** Switches the pane to the plane the element is drawn on; nothing happens if it is already shown. */
+export function showPlaneOf(pane, element) {
+  const canvas = pane.viewer.get('canvas');
+  const root = canvas.findRoot(element);
+
+  if (root) {
+    canvas.setRootElement(root);
+  }
+}

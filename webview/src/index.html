@@ -13,7 +13,7 @@
     <button type="button" class="chip changed" data-kind="changed" aria-pressed="true"><i></i>Changed <b>0</b></button>
     <button type="button" class="chip layout" data-kind="layout" aria-pressed="true"><i></i>Moved <b>0</b></button>
     <span id="summary-note"></span>
-    <!-- titles of the change-nav and zoom buttons are set from main.js: they depend on whether the
+    <!-- titles of the change-nav and zoom buttons are set from navigation.js and zoom.js: they depend on whether the
          button is currently usable, and the wording must not be duplicated here -->
     <div id="change-nav">
       <button id="change-prev" class="bar-button" type="button">&lsaquo;</button>
@@ -25,7 +25,7 @@
       <button id="zoom-in" class="bar-button" type="button">+</button>
       <button id="zoom-fit" class="bar-button" type="button">Fit</button>
     </div>
-    <!-- title is set from main.js, so the wording lives in one place and follows the open/closed state -->
+    <!-- title is set from change-list.js, so the wording lives in one place and follows the open/closed state -->
     <button id="toggle-changes" class="bar-button" type="button">Changes list</button>
     <div id="export-wrap">
       <button id="export" class="bar-button" type="button" data-tip="Export the diagram or the change list">Export</button>
@@ -59,7 +59,7 @@
   <!-- right-click menu of a diagram element; the page draws it, JCEF would show no native one -->
   <ul id="element-menu" hidden><li id="element-history"></li></ul>
 
-  <!-- tooltips are drawn here, not by the browser: see the tooltips section of main.js -->
+  <!-- tooltips are drawn here, not by the browser: see tooltips.js -->
   <div id="tip" role="tooltip" hidden></div>
 </div>
 <!-- repaints the whole view while something moves: see repaint.js -->

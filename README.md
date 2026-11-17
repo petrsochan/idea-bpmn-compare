@@ -127,11 +127,15 @@ compatibility is checked by the IntelliJ Plugin Verifier (`./gradlew verifyPlugi
   shows the popup and opens the commit diff
 - `Json` – the minimal JSON written to and read from the page
 
-`webview/src/` – page with two `NavigatedViewer`s, markers, synchronization, zoom and filters (`main.js`),
-plus the pure modules it is built from: `changes.js` (change list), `extensions.js` (Camunda/Zeebe
-extension elements), `layout.js` (tolerance for tiny layout shifts), `format.js` (names and values),
-`export.js` (Markdown, SVG, PNG), `planes.js` (changes hidden in collapsed subprocesses), `history.js` (what one
-commit did to one element).
+`webview/src/` – page with two `NavigatedViewer`s. `main.js` wires the parts together, renders what the
+host sends and answers its calls. The parts that work with the page: `panes.js` (the two viewers),
+`sync.js` (viewport, plane, hover and cursor synchronization), `decorations.js` (markers and badges),
+`navigation.js` (F7 stepping, centring), `zoom.js`, `filter.js` (filter chips), `change-list.js` (counts
+and the side list), `export-menu.js`, `element-menu.js` (right-click menu, history), `tooltips.js`,
+`host.js` (messages to the IDE). The pure modules they are built from: `changes.js` (change list),
+`extensions.js` (Camunda/Zeebe extension elements), `layout.js` (tolerance for tiny layout shifts),
+`format.js` (names and values), `export.js` (Markdown, SVG, PNG), `planes.js` (changes hidden in
+collapsed subprocesses), `history.js` (what one commit did to one element).
 
 `docs/screenshots/` holds the two versions of the sample diagram the pictures in `docs/images/` are taken from:
 build the web view, serve `build/generated/webview/bpmn-compare` together with both files, and pass them to
@@ -140,7 +144,7 @@ build the web view, serve `build/generated/webview/bpmn-compare` together with b
 Tests: `src/test/java/…` (JUnit) and `webview/test/` (`node:test`). Both run in `./gradlew check`.
 
 ### Things that look wrong but are not
-- **The page draws its own tooltips** (`data-tip` plus the tooltips section of `main.js`), and uses no
+- **The page draws its own tooltips** (`data-tip` plus `tooltips.js`), and uses no
   `title` attribute. Inside JCEF a native tooltip is handed to the client through
   `CefDisplayHandler#onTooltip`, which `JBCefClient` only forwards to display handlers a plugin
   registers – so a `title` is silently swallowed and nothing is ever shown.

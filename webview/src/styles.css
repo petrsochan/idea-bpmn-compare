@@ -317,7 +317,7 @@ button.chip:hover { border-color: var(--accent); }
 
 /*
  * Drawn by the page: inside JCEF a native `title` tooltip is never shown, because CEF delegates it
- * to a display handler and nothing in the host draws one. See the tooltips section of main.js.
+ * to a display handler and nothing in the host draws one. See tooltips.js.
  */
 #tip {
   position: fixed;
