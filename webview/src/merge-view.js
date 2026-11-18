@@ -1,0 +1,226 @@
+import { diff } from 'bpmn-js-differ';
+
+import { toChangeList } from './changes.js';
+import { dropMinorLayoutChanges } from './layout.js';
+import { resultStates, toMergeEntries } from './merge-changes.js';
+import {
+  activePanes, canvasOf, collectFlowElements, createPane, importInto, importKeepingLast, viewOf
+} from './panes.js';
+import { setTip } from './tooltips.js';
+
+/*
+ * Merge mode: the IDE's merge window shows ours | result | theirs, with the base behind a switch in the
+ * middle. The result is the merge window's result document and is replaced while the user resolves.
+ */
+
+export const MERGE_SIDES = [ 'ours', 'result', 'base', 'theirs' ];
+
+const INVALID_RESULT = 'The result is not valid BPMN right now – showing the last valid state.';
+
+/**
+ * @param {object} options
+ * @param {Object<string, object>} options.panes the page's panes by side; the merge panes are added on first use
+ * @param {ReturnType<import('./sync.js').createSync>} options.sync
+ * @param {ReturnType<import('./zoom.js').createZoom>} options.zoom
+ * @param {Function} options.Viewer the bpmn-js viewer class
+ * @param {(xml: string) => Promise} options.parse rejects for XML that is not BPMN
+ * @param {(merge: { entries, states, resultChanges }) => void} options.onRendered after every render
+ */
+export function createMergeView({ panes, sync, zoom, Viewer, parse, onRendered }) {
+  let middle = 'result';
+
+  /** Definitions and elements of ours, base and theirs, and the entries computed from them. */
+  let fixed = null;
+
+  /** The last valid result. */
+  let result = null;
+
+  function ensurePanes() {
+    if (panes.ours) {
+      return;
+    }
+
+    for (const side of MERGE_SIDES) {
+      const pane = createPane(side, Viewer);
+      panes[side] = pane;
+      sync.attach(pane);
+      zoom.attach(pane);
+    }
+
+    for (const button of document.querySelectorAll('[data-middle]')) {
+      button.addEventListener('click', () => setMiddle(button.dataset.middle));
+    }
+  }
+
+  /** Which panes take part: the merge panes in merge mode, left and right otherwise. */
+  function setMode(mode) {
+    document.body.dataset.mode = mode;
+
+    for (const side of [ 'left', 'right' ]) {
+      panes[side].shown = mode !== 'merge';
+    }
+
+    if (panes.ours) {
+      panes.ours.shown = panes.theirs.shown = mode === 'merge';
+      panes.result.shown = mode === 'merge' && middle === 'result';
+      panes.base.shown = mode === 'merge' && middle === 'base';
+    }
+  }
+
+  /** Shows the result or the base in the middle, on the plane and region the other panes show. */
+  function setMiddle(which) {
+    if (which !== 'result' && which !== 'base') {
+      return;
+    }
+
+    middle = which;
+
+    if (!panes.ours) {
+      return;
+    }
+
+    panes.result.root.hidden = which !== 'result';
+    panes.base.root.hidden = which !== 'base';
+    setMode(document.body.dataset.mode);
+
+    for (const button of document.querySelectorAll('[data-middle]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.middle === which));
+    }
+
+    const shown = panes[which];
+    const leader = activePanes(panes).find((pane) => pane !== shown);
+
+    if (shown.loaded) {
+      canvasOf(shown).resized();
+
+      if (leader) {
+        sync.syncPlane(leader.side, canvasOf(leader).getRootElement().id);
+        sync.copyViewbox(leader, shown);
+      }
+    }
+
+    zoom.updateControls();
+  }
+
+  /** Renders a whole merge: `{ ours, base, theirs, result }`, each like a side of setDiagrams. */
+  async function setMerge(payload) {
+    ensurePanes();
+    setMode('merge');
+    setMiddle(middle);
+
+    const [ ours, base, theirs ] = await Promise.all([
+      importInto(panes.ours, payload.ours || {}),
+      importInto(panes.base, payload.base || {}),
+      importInto(panes.theirs, payload.theirs || {})
+    ]);
+
+    const elements = (pane) => (pane.loaded ? collectFlowElements(pane) : {});
+    fixed = {
+      ours: ours && { defs: ours, elements: elements(panes.ours) },
+      base: base && { defs: base, elements: elements(panes.base) },
+      theirs: theirs && { defs: theirs, elements: elements(panes.theirs) }
+    };
+    fixed.entries = toMergeEntries(
+      changesBetween(fixed.base, fixed.ours),
+      changesBetween(fixed.base, fixed.theirs),
+      changesBetween(fixed.ours, fixed.theirs));
+
+    // a new merge: forget the result of the previous one, so a broken result is reported, not kept
+    panes.result.viewer.clear();
+    panes.result.loaded = false;
+    result = null;
+    await importResult(payload.result || {});
+
+    for (const pane of activePanes(panes)) {
+      canvasOf(pane).resized();
+      canvasOf(pane).zoom('fit-viewport', 'auto');
+    }
+
+    const leader = activePanes(panes)[0];
+
+    if (sync.enabled && leader) {
+      sync.copyViewboxToOthers(leader);
+    }
+
+    // the base is hidden but must already be at the same place when it is switched in
+    if (leader && panes.base.loaded && !panes.base.shown) {
+      sync.copyViewbox(leader, panes.base);
+    }
+
+    rendered();
+  }
+
+  /** Replaces the result, keeping where each pane looks. */
+  async function setMergeResult(spec) {
+    if (!fixed) {
+      return;
+    }
+
+    const view = panes.result.loaded ? viewOf(panes.result) : null;
+
+    await importResult(spec || {});
+
+    if (view && panes.result.loaded) {
+      const canvas = canvasOf(panes.result);
+      const root = view.rootId && panes.result.viewer.get('elementRegistry').get(view.rootId);
+
+      if (root) {
+        canvas.setRootElement(root);
+      }
+
+      canvas.viewbox({ x: view.x, y: view.y, width: view.width, height: view.height });
+    } else if (panes.result.loaded) {
+      canvasOf(panes.result).zoom('fit-viewport', 'auto');
+    }
+
+    rendered();
+  }
+
+  async function importResult(spec) {
+    const { defs, warnings, kept } = await importKeepingLast(panes.result, spec, parse);
+    const notice = panes.result.root.querySelector('.notice');
+
+    let text = '';
+
+    if (kept) {
+      text = INVALID_RESULT;
+    } else if (warnings.length) {
+      text = 'The result has ' + warnings.length + (warnings.length === 1 ? ' problem' : ' problems')
+        + ' – parts of it may not be drawn.';
+    }
+
+    notice.textContent = text;
+    setTip(notice, warnings.map((w) => w && w.message || String(w)).join('\n'));
+
+    if (!kept) {
+      result = defs ? { defs, elements: collectFlowElements(panes.result) } : null;
+    }
+  }
+
+  function rendered() {
+    const { entries } = fixed;
+    let states = new Map();
+    let resultChanges = [];
+
+    if (result && fixed.base) {
+      resultChanges = changesBetween(fixed.base, result);
+      states = resultStates(entries, resultChanges,
+        fixed.ours ? changesBetween(fixed.ours, result) : [],
+        fixed.theirs ? changesBetween(fixed.theirs, result) : []);
+    }
+
+    onRendered({ entries, states, resultChanges });
+  }
+
+  return { setMerge, setMergeResult, setMiddle, setMode };
+}
+
+/** The change list the two-pane view would show for old → new; empty when either is missing. */
+function changesBetween(oldSide, newSide) {
+  if (!oldSide || !newSide) {
+    return [];
+  }
+
+  return toChangeList(dropMinorLayoutChanges(diff(oldSide.defs, newSide.defs), oldSide.defs, newSide.defs),
+    newSide.elements, oldSide.elements);
+}

@@ -160,6 +160,31 @@ button.chip:hover { border-color: var(--accent); }
 .pane .message.error { color: var(--removed); }
 .pane .message:empty { display: none; }
 
+/* ---- merge mode: which panes and controls each mode shows ---- */
+
+body:not([data-mode="merge"]) .merge-pane { display: none; }
+body[data-mode="merge"] #pane-left,
+body[data-mode="merge"] #pane-right,
+body[data-mode="merge"] #export-wrap { display: none; }
+.pane[hidden] { display: none; }
+
+.pane header .notice { margin-left: auto; color: var(--removed); overflow: hidden; text-overflow: ellipsis; }
+.pane header .notice:empty { display: none; }
+
+.middle-switch { display: inline-flex; flex: none; }
+.middle-switch button {
+  font: inherit;
+  padding: 0 8px;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.middle-switch button + button { border-left: none; }
+.middle-switch button:first-child { border-radius: 3px 0 0 3px; }
+.middle-switch button:last-child { border-radius: 0 3px 3px 0; }
+.middle-switch button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+
 /*
  * The circle is the element itself, not a pseudo-element hanging out of a 0x0 box, and it gets a
  * compositor layer of its own. With the old 0x0 box JCEF (off-screen rendering) repainted only part

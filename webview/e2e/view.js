@@ -23,6 +23,15 @@ const pageUrl = pathToFileURL(path.resolve(here, '..', '..', 'build', 'generated
 export const CURRENT = readFileSync(path.join(here, 'fixtures', 'current.bpmn'), 'utf8');
 export const REVISION = readFileSync(path.join(here, 'fixtures', 'revision.bpmn'), 'utf8');
 
+/*
+ * Merge fixtures: base = REVISION, ours = CURRENT, theirs = MERGE_THEIRS. Against the base theirs
+ *   - renames Task_Check to "Check warehouse stock" (ours renamed it to "Verify availability": conflict),
+ *   - renames Task_Review to "Manual check" (ours removed it: conflict),
+ *   - renames End_Hold to "Held" (ours moved it: both changed, no conflict),
+ *   - renames Task_Ship to "Ship parcel" and adds Task_Gift (theirs only).
+ */
+export const MERGE_THEIRS = readFileSync(path.join(here, 'fixtures', 'merge-theirs.bpmn'), 'utf8');
+
 /** The change list of the fixtures, in its order: added, removed, changed, moved. */
 export const ALL_CHANGES = [
   'F_Supplier', 'F_No2', 'Task_Supplier', 'Pay_F3', 'Task_Receipt',
@@ -53,6 +62,38 @@ export async function showDiagrams(page, payload = {}) {
     window.bpmnCompare.setDiagrams(p);
   }, full);
   await page.waitForFunction(() => document.querySelectorAll('#change-list li').length > 0);
+}
+
+/** Runs a host call that renders and waits until the page has finished that render. */
+export async function rendered(page, call) {
+  const before = await page.evaluate(() => Number(document.body.dataset.renders || 0));
+
+  await call();
+  await page.waitForFunction((b) => Number(document.body.dataset.renders || 0) > b, before);
+}
+
+/** Shows a merge: the merge fixtures, with the base as the result unless `sides` says otherwise. */
+export async function showMerge(page, sides = {}) {
+  const full = {
+    ours: { xml: CURRENT, label: 'Changes from main' },
+    base: { xml: REVISION, label: 'Base' },
+    theirs: { xml: MERGE_THEIRS, label: 'Changes from theirs' },
+    result: { xml: REVISION, label: 'Result' },
+    ...sides
+  };
+
+  await rendered(page, () => page.evaluate((p) => window.bpmnCompare.setMerge(p), full));
+}
+
+/** Opens the page and shows the merge fixtures. */
+export async function openMerge(page, sides = {}) {
+  await openView(page);
+  await showMerge(page, sides);
+}
+
+/** Replaces the result of the merge shown and waits until it is rendered. */
+export function setResult(page, xml) {
+  return rendered(page, () => page.evaluate((x) => window.bpmnCompare.setMergeResult({ xml: x, label: 'Result' }), xml));
 }
 
 /** Opens the page and shows the fixtures. */

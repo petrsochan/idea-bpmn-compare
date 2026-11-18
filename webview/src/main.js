@@ -1,5 +1,6 @@
 import NavigatedViewer from 'bpmn-js/lib/NavigatedViewer';
 import { diff } from 'bpmn-js-differ';
+import { BpmnModdle } from 'bpmn-moddle';
 
 import { createChangeList } from './change-list.js';
 import { toChangeList } from './changes.js';
@@ -14,6 +15,7 @@ import { createNavigation } from './navigation.js';
 import {
   activePanes, canvasOf, collectFlowElements, createPane, elementOf, importInto, resizeAll, showMessage, viewOf
 } from './panes.js';
+import { createMergeView } from './merge-view.js';
 import { createFullRepaint } from './repaint.js';
 import { createSync } from './sync.js';
 import { hideTip, installTooltips } from './tooltips.js';
@@ -91,6 +93,15 @@ const elementMenu = createElementMenu({
   }
 });
 
+const mergeView = createMergeView({
+  panes,
+  sync,
+  zoom,
+  Viewer: NavigatedViewer,
+  parse: (xml) => new BpmnModdle().fromXML(xml),
+  onRendered: () => {}
+});
+
 /** Changes the user can actually see, in change-list order, so navigation and the chips agree. */
 function visibleChanges() {
   return currentChanges.filter((change) => visibleKind(change, filter.kinds));
@@ -107,12 +118,23 @@ function redrawChanges() {
 // diagrams + diff
 // ---------------------------------------------------------------------------
 
-let pendingPayload = null;
+/** Renders waiting to run, oldest first; see enqueue. */
+const queue = [];
 let rendering = false;
+let renders = 0;
 
-/** Queues a render; only the most recent payload is rendered if several arrive quickly. */
-function setDiagrams(payload) {
-  pendingPayload = payload;
+/**
+ * Queues a render. Renders run one at a time, in order; a render that waits behind another one of the
+ * same type is replaced, so of several quick updates only the most recent is rendered.
+ */
+function enqueue(type, run) {
+  const last = queue[queue.length - 1];
+
+  if (last && last.type === type) {
+    last.run = run;
+  } else {
+    queue.push({ type, run });
+  }
 
   if (!rendering) {
     pump();
@@ -122,21 +144,38 @@ function setDiagrams(payload) {
 async function pump() {
   rendering = true;
 
-  while (pendingPayload) {
-    const payload = pendingPayload;
-    pendingPayload = null;
+  while (queue.length) {
+    const { run } = queue.shift();
 
     try {
-      await render(payload);
+      await run();
     } catch (err) {
       console.error('[bpmn-compare] render failed', err);
     }
+
+    // tells tests (and anyone watching) that a render has finished
+    document.body.dataset.renders = String(++renders);
 
     // the import finishes long after the host's call started the last burst
     repaintFully();
   }
 
   rendering = false;
+}
+
+function setDiagrams(payload) {
+  enqueue('diagrams', () => {
+    mergeView.setMode('diff');
+    return render(payload);
+  });
+}
+
+function setMerge(payload) {
+  enqueue('merge', () => sync.quietly(() => mergeView.setMerge(payload)));
+}
+
+function setMergeResult(spec) {
+  enqueue('result', () => sync.quietly(() => mergeView.setMergeResult(spec)));
 }
 
 function render(payload) {
@@ -266,6 +305,10 @@ document.addEventListener('keydown', (event) => {
 
 const hostApi = {
   setDiagrams,
+  setMerge,
+  setMergeResult,
+  setMiddle: mergeView.setMiddle,
+  isRendering: () => rendering,
   setHistoryAvailable: elementMenu.setHistoryAvailable,
   computeHistory,
   setSync: sync.setEnabled,

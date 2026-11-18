@@ -84,6 +84,42 @@ export async function importInto(pane, spec) {
   }
 }
 
+/**
+ * Like {@link importInto}, but XML that does not parse leaves the diagram that is shown in place - for
+ * content that is being edited, which is invalid for a moment between keystrokes.
+ *
+ * @param {(xml: string) => Promise} parse rejects for XML that is not BPMN
+ * @returns `{ defs, warnings, kept }` - `kept` when the XML did not parse and the shown diagram stayed
+ */
+export async function importKeepingLast(pane, spec, parse) {
+  if (spec.xml && pane.loaded) {
+    try {
+      await parse(spec.xml);
+    } catch (err) {
+      return { defs: pane.viewer.getDefinitions(), warnings: [], kept: true };
+    }
+  }
+
+  pane.labelEl.textContent = spec.label || '';
+  setTip(pane.labelEl, spec.label || '');
+
+  if (!spec.xml) {
+    return { defs: await importInto(pane, spec), warnings: [], kept: false };
+  }
+
+  try {
+    const { warnings } = await pane.viewer.importXML(spec.xml);
+    pane.loaded = true;
+    showMessage(pane, '');
+    return { defs: pane.viewer.getDefinitions(), warnings: warnings || [], kept: false };
+  } catch (err) {
+    pane.viewer.clear();
+    pane.loaded = false;
+    showMessage(pane, 'Cannot render diagram:\n' + (err && err.message || err), true);
+    return { defs: null, warnings: [], kept: false };
+  }
+}
+
 /** Business objects of every drawn element except the planes and labels, by id. */
 export function collectFlowElements(pane) {
   const result = {};

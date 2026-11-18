@@ -50,6 +50,31 @@
       <div class="message"></div>
       <div class="ghost-cursor"></div>
     </section>
+    <!-- merge mode (merge-view.js): ours | result or base | theirs; the diagrams are created on the first merge -->
+    <section class="pane merge-pane" id="pane-ours">
+      <header><span class="label"></span><span class="notice"></span></header>
+      <div class="canvas"></div>
+      <div class="message"></div>
+      <div class="ghost-cursor"></div>
+    </section>
+    <section class="pane merge-pane" id="pane-result">
+      <header><span class="middle-switch" role="group" aria-label="Middle pane"><button type="button" data-middle="result">Result</button><button type="button" data-middle="base">Base</button></span><span class="label"></span><span class="notice"></span></header>
+      <div class="canvas"></div>
+      <div class="message"></div>
+      <div class="ghost-cursor"></div>
+    </section>
+    <section class="pane merge-pane" id="pane-base">
+      <header><span class="middle-switch" role="group" aria-label="Middle pane"><button type="button" data-middle="result">Result</button><button type="button" data-middle="base">Base</button></span><span class="label"></span><span class="notice"></span></header>
+      <div class="canvas"></div>
+      <div class="message"></div>
+      <div class="ghost-cursor"></div>
+    </section>
+    <section class="pane merge-pane" id="pane-theirs">
+      <header><span class="label"></span><span class="notice"></span></header>
+      <div class="canvas"></div>
+      <div class="message"></div>
+      <div class="ghost-cursor"></div>
+    </section>
   </div>
 
   <aside id="changes" hidden>
