@@ -1,4 +1,5 @@
 import org.apache.tools.ant.taskdefs.condition.Os
+import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 plugins {
     id("java")
@@ -46,6 +47,10 @@ dependencies {
         // IntelliJ Plugin Verifier: checks that every platform API the plugin calls exists in the
         // target IDEs - unlike verifyPluginStructure, which only validates the descriptor.
         pluginVerifier()
+
+        // a running IDE application for the tests of the IDE side (@TestApplication)
+        testFramework(TestFrameworkType.Platform)
+        testFramework(TestFrameworkType.JUnit5)
     }
 
     testImplementation(platform("org.junit:junit-bom:6.1.3"))

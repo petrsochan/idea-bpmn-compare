@@ -41,15 +41,25 @@ final class BpmnMergeViewer implements MergeTool.MergeViewer {
     private final BpmnMergePanel diagrams;
     private final OnePixelSplitter splitter = new OnePixelSplitter(true, SPLITTER_KEY, DEFAULT_DIAGRAMS_PROPORTION);
 
-    BpmnMergeViewer(TextMergeRequest request, MergeTool.MergeViewer text) {
-        this.text = text;
-        // read once, on the EDT the merge window builds its viewer on: ours, base and theirs do not change
+    /** The viewer of a merge request; ours, base and theirs are read once, as they do not change during it. */
+    static BpmnMergeViewer of(TextMergeRequest request, MergeTool.MergeViewer text) {
         List<String> sideTexts = request.getContents().stream()
                 .map(DocumentContent::getDocument)
-                .map(document -> document.getText())
+                .map(Document::getText)
                 .toList();
-        this.result = request.getOutputContent().getDocument();
-        this.diagrams = new BpmnMergePanel(sideTexts, request.getContentTitles(), result, this::revealInResult);
+        return new BpmnMergeViewer(sideTexts, request.getContentTitles(), request.getOutputContent().getDocument(), text);
+    }
+
+    /**
+     * @param sideTexts ours, base and theirs
+     * @param titles    their titles
+     * @param result    the result document the text merge edits
+     * @param text      the text merge it wraps
+     */
+    BpmnMergeViewer(List<String> sideTexts, List<String> titles, Document result, MergeTool.MergeViewer text) {
+        this.text = text;
+        this.result = result;
+        this.diagrams = new BpmnMergePanel(sideTexts, titles, result, this::revealInResult);
         splitter.setSecondComponent(text.getComponent());
 
         // the other direction: the caret in the result column selects its element in the diagrams
@@ -101,7 +111,7 @@ final class BpmnMergeViewer implements MergeTool.MergeViewer {
      * column is the editor of the result document inside this window's text merge; an element the result does
      * not have (yet) moves nothing.
      */
-    private void revealInResult(String id) {
+    void revealInResult(String id) {
         int offset = BpmnXmlLocator.offsetOfElement(result.getText(), id);
         if (offset < 0) {
             return;
@@ -125,11 +135,11 @@ final class BpmnMergeViewer implements MergeTool.MergeViewer {
         }
     }
 
-    private boolean diagramsShown() {
+    boolean diagramsShown() {
         return splitter.getFirstComponent() != null;
     }
 
-    private void showDiagrams(boolean show) {
+    void showDiagrams(boolean show) {
         if (show == diagramsShown()) {
             return;
         }

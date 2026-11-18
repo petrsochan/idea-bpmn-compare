@@ -35,7 +35,7 @@ public final class BpmnMergeTool implements MergeTool {
         if (delegate == null) {
             throw new IllegalStateException("No merge tool to show " + request);
         }
-        return new BpmnMergeViewer((TextMergeRequest) request, delegate.createComponent(context, request));
+        return BpmnMergeViewer.of((TextMergeRequest) request, delegate.createComponent(context, request));
     }
 
     private static @Nullable MergeTool delegate(MergeContext context, MergeRequest request) {
