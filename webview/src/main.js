@@ -12,7 +12,7 @@ import { sendToHost } from './host.js';
 import { dropMinorLayoutChanges } from './layout.js';
 import { createNavigation } from './navigation.js';
 import {
-  SIDES, canvasOf, collectFlowElements, createPane, elementOf, importInto, resizeAll, showMessage, viewOf
+  activePanes, canvasOf, collectFlowElements, createPane, elementOf, importInto, resizeAll, showMessage, viewOf
 } from './panes.js';
 import { createFullRepaint } from './repaint.js';
 import { createSync } from './sync.js';
@@ -190,13 +190,8 @@ function render(payload) {
 }
 
 function restoreOrFit(previousView) {
-  for (const side of SIDES) {
-    const pane = panes[side];
-
-    if (!pane.loaded) {
-      continue;
-    }
-
+  for (const pane of activePanes(panes)) {
+    const side = pane.side;
     const canvas = canvasOf(pane);
     canvas.resized();
 
@@ -216,9 +211,11 @@ function restoreOrFit(previousView) {
     }
   }
 
-  // with sync on, start both sides from the same viewport
-  if (sync.enabled && panes.left.loaded && panes.right.loaded && !(previousView && previousView.left)) {
-    sync.copyViewbox(panes.left, panes.right);
+  // with sync on, start all sides from the same viewport
+  const leader = activePanes(panes)[0];
+
+  if (sync.enabled && leader && !(previousView && previousView[leader.side])) {
+    sync.copyViewboxToOthers(leader);
   }
 }
 

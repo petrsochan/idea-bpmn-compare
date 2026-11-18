@@ -1,4 +1,4 @@
-import { canvasOf, loadedPanes, other } from './panes.js';
+import { activePanes, canvasOf } from './panes.js';
 import { setBarButtonState } from './tooltips.js';
 
 const ZOOM_STEP = 1.2;
@@ -15,7 +15,7 @@ const ZOOM_TITLES = {
 /**
  * The zoom buttons of the top bar.
  *
- * @param {{ left, right }} panes
+ * @param {Object<string, object>} panes by side; panes added later are wired with `attach`
  * @param {ReturnType<import('./sync.js').createSync>} sync
  */
 export function createZoom(panes, sync) {
@@ -26,7 +26,7 @@ export function createZoom(panes, sync) {
    * around its own centre.
    */
   function applyZoom(action) {
-    const loaded = loadedPanes(panes);
+    const loaded = activePanes(panes);
 
     if (!loaded.length) {
       return;
@@ -40,7 +40,7 @@ export function createZoom(panes, sync) {
     }
 
     if (together) {
-      sync.copyViewbox(targets[0], panes[other(targets[0].side)]);
+      sync.copyViewboxToOthers(targets[0]);
     }
 
     updateControls();
@@ -57,7 +57,7 @@ export function createZoom(panes, sync) {
 
   /** Zoom level shown in the toolbar - the left pane leads, the right one stands in when it is empty. */
   function currentZoom() {
-    const pane = loadedPanes(panes)[0];
+    const pane = activePanes(panes)[0];
 
     return pane ? canvasOf(pane).zoom() : null;
   }
@@ -77,11 +77,13 @@ export function createZoom(panes, sync) {
   document.getElementById('zoom-reset').addEventListener('click', () => applyZoom((canvas) => canvas.zoom(1)));
   document.getElementById('zoom-fit').addEventListener('click', () => applyZoom((canvas) => canvas.zoom('fit-viewport', 'auto')));
 
-  for (const pane of Object.values(panes)) {
+  function attach(pane) {
     pane.viewer.get('eventBus').on('canvas.viewbox.changed', () => updateControls());
   }
 
+  Object.values(panes).forEach(attach);
+
   updateControls();
 
-  return { updateControls };
+  return { updateControls, attach };
 }

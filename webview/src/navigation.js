@@ -1,6 +1,6 @@
 import { getBBox } from 'diagram-js/lib/util/Elements';
 
-import { canvasOf, elementOf, other } from './panes.js';
+import { activePanes, canvasOf, elementOf } from './panes.js';
 import { showPlaneOf } from './planes.js';
 import { setBarButtonState } from './tooltips.js';
 
@@ -10,7 +10,7 @@ const FOCUS_MARK_MS = 1500;
  * Stepping through the changes (F7 / Shift+F7 and the arrows in the top bar) and centring an element.
  *
  * @param {object} options
- * @param {{ left, right }} options.panes
+ * @param {Object<string, object>} options.panes by side
  * @param {ReturnType<import('./sync.js').createSync>} options.sync
  * @param {() => object[]} options.visibleChanges changes the user can see, in change-list order
  * @param {(id: string | null) => void} options.onSelect the change stepping is on now
@@ -46,7 +46,7 @@ export function createNavigation({ panes, sync, visibleChanges, onSelect, repain
 
   /** Selects and centres an element, driven by the caret position in the XML editor. */
   function selectElement(id) {
-    if (id && (panes.left.loaded || panes.right.loaded)) {
+    if (id && activePanes(panes).length) {
       focusElement(id);
     }
   }
@@ -62,7 +62,7 @@ export function createNavigation({ panes, sync, visibleChanges, onSelect, repain
     selectedId = id;
     onSelect(id);
 
-    const targets = [ panes.left, panes.right ].filter((pane) => elementOf(pane, id));
+    const targets = activePanes(panes).filter((pane) => elementOf(pane, id));
 
     if (!targets.length) {
       return;
@@ -83,7 +83,7 @@ export function createNavigation({ panes, sync, visibleChanges, onSelect, repain
       }
     });
 
-    // centering one side is enough only while both show the same plane - the other one follows;
+    // centering one side is enough only while all show the same plane - the others follow;
     // on different planes the coordinates are unrelated, so each side is centred on its own
     const together = sync.linked();
     const toCenter = together ? targets.slice(0, 1) : targets;
@@ -93,7 +93,7 @@ export function createNavigation({ panes, sync, visibleChanges, onSelect, repain
     }
 
     if (together) {
-      sync.copyViewbox(toCenter[0], panes[other(toCenter[0].side)]);
+      sync.copyViewboxToOthers(toCenter[0]);
     }
 
     for (const pane of targets) {

@@ -1,7 +1,7 @@
-import { canvasOf, elementOf, onSamePlane, other } from './panes.js';
+import { activePanes, canvasOf, elementOf, onSamePlane, othersOf } from './panes.js';
 
 /*
- * Synchronization of the two panes: viewport, plane (collapsed subprocess drilled into), hovered
+ * Synchronization of the panes: viewport, plane (collapsed subprocess drilled into), hovered
  * element and a ghost of the mouse cursor.
  *
  * While the page itself moves a pane - a render, a sync, a jump to a change - the pane's events must
@@ -9,9 +9,9 @@ import { canvasOf, elementOf, onSamePlane, other } from './panes.js';
  */
 
 /**
- * Wires the synchronization to both panes.
+ * Wires the synchronization to the panes; panes added to `panes` later are wired with `attach`.
  *
- * @param {{ left, right }} panes
+ * @param {Object<string, object>} panes by side
  */
 export function createSync(panes) {
   let enabled = true;
@@ -46,9 +46,11 @@ export function createSync(panes) {
     return result;
   }
 
-  /** Sync is on, both panes are loaded and show the same plane: moving one moves the other. */
+  /** Sync is on, at least two panes are active and all show the same plane: moving one moves the others. */
   function linked() {
-    return enabled && panes.left.loaded && panes.right.loaded && onSamePlane(panes.left, panes.right);
+    const active = activePanes(panes);
+
+    return enabled && active.length > 1 && active.every((pane) => onSamePlane(active[0], pane));
   }
 
   function copyViewbox(fromPane, toPane) {
@@ -63,97 +65,111 @@ export function createSync(panes) {
     quietly(() => canvasOf(toPane).viewbox({ x, y, width, height }));
   }
 
-  function scheduleViewSync(fromSide) {
-    if (!enabled || applying || pendingFrom) {
+  /** Copies the viewbox of `fromPane` to every other active pane on its plane. */
+  function copyViewboxToOthers(fromPane) {
+    for (const pane of othersOf(panes, fromPane)) {
+      copyViewbox(fromPane, pane);
+    }
+  }
+
+  function scheduleViewSync(fromPane) {
+    if (!enabled || applying || pendingFrom || !fromPane.shown) {
       return;
     }
 
     // 'changing' fires before the new viewbox is applied - read it on the next frame
-    pendingFrom = fromSide;
+    pendingFrom = fromPane;
 
     requestAnimationFrame(() => {
       const from = pendingFrom;
       pendingFrom = null;
 
       if (enabled && !applying) {
-        copyViewbox(panes[from], panes[other(from)]);
+        copyViewboxToOthers(from);
       }
     });
   }
 
   /**
-   * Shows the plane `rootId` on the other side too. A subprocess that exists on one side only leaves
-   * the other side where it is - there is nothing to show.
+   * Shows the plane `rootId` on the other panes too. A subprocess that exists on one side only leaves
+   * the other sides where they are - there is nothing to show.
    *
    * The viewbox is copied right away: bpmn-js has already moved the source pane to its position on
    * the new plane, and does not always scroll it, so the usual scroll-driven sync cannot be relied on.
    */
   function syncPlane(fromSide, rootId) {
-    const toPane = panes[other(fromSide)];
-    const root = elementOf(toPane, rootId);
+    const fromPane = panes[fromSide];
 
-    if (!root) {
-      return;
+    for (const toPane of othersOf(panes, fromPane)) {
+      const root = elementOf(toPane, rootId);
+
+      if (!root) {
+        continue;
+      }
+
+      quietly(() => {
+        canvasOf(toPane).setRootElement(root);
+        copyViewbox(fromPane, toPane);
+      });
     }
-
-    quietly(() => {
-      canvasOf(toPane).setRootElement(root);
-      copyViewbox(panes[fromSide], toPane);
-    });
   }
 
   function mirrorCursor(fromPane, event) {
-    const toPane = panes[other(fromPane.side)];
+    for (const toPane of Object.values(panes)) {
+      if (toPane === fromPane) {
+        continue;
+      }
 
-    // on different planes the same coordinates mean unrelated places
-    if (!fromPane.loaded || !toPane.loaded || !onSamePlane(fromPane, toPane)) {
-      hideGhost(toPane);
-      return;
+      // on different planes the same coordinates mean unrelated places
+      if (!fromPane.loaded || !toPane.loaded || !toPane.shown || !onSamePlane(fromPane, toPane)) {
+        hideGhost(toPane);
+        continue;
+      }
+
+      const fromRect = fromPane.canvasEl.getBoundingClientRect();
+      const fromBox = canvasOf(fromPane).viewbox();
+
+      // screen -> diagram coordinates
+      const diagramX = fromBox.x + (event.clientX - fromRect.left) / fromBox.scale;
+      const diagramY = fromBox.y + (event.clientY - fromRect.top) / fromBox.scale;
+
+      // diagram -> screen coordinates of the other pane
+      const toBox = canvasOf(toPane).viewbox();
+      const x = (diagramX - toBox.x) * toBox.scale;
+      const y = (diagramY - toBox.y) * toBox.scale;
+
+      const inside = x >= 0 && y >= 0 && x <= toPane.canvasEl.clientWidth && y <= toPane.canvasEl.clientHeight;
+
+      if (!inside) {
+        hideGhost(toPane);
+        continue;
+      }
+
+      // the ghost is positioned relative to the pane, the canvas starts below the header
+      const offsetTop = toPane.canvasEl.offsetTop;
+
+      toPane.ghostEl.style.transform = 'translate(' + x + 'px,' + (y + offsetTop) + 'px)';
+      toPane.ghostEl.classList.add('visible');
     }
-
-    const fromRect = fromPane.canvasEl.getBoundingClientRect();
-    const fromBox = canvasOf(fromPane).viewbox();
-
-    // screen -> diagram coordinates
-    const diagramX = fromBox.x + (event.clientX - fromRect.left) / fromBox.scale;
-    const diagramY = fromBox.y + (event.clientY - fromRect.top) / fromBox.scale;
-
-    // diagram -> screen coordinates of the other pane
-    const toBox = canvasOf(toPane).viewbox();
-    const x = (diagramX - toBox.x) * toBox.scale;
-    const y = (diagramY - toBox.y) * toBox.scale;
-
-    const inside = x >= 0 && y >= 0 && x <= toPane.canvasEl.clientWidth && y <= toPane.canvasEl.clientHeight;
-
-    if (!inside) {
-      hideGhost(toPane);
-      return;
-    }
-
-    // the ghost is positioned relative to the pane, the canvas starts below the header
-    const offsetTop = toPane.canvasEl.offsetTop;
-
-    toPane.ghostEl.style.transform = 'translate(' + x + 'px,' + (y + offsetTop) + 'px)';
-    toPane.ghostEl.classList.add('visible');
   }
 
   function hideGhost(pane) {
     pane.ghostEl.classList.remove('visible');
   }
 
-  function setHover(side, id, on) {
-    const pane = panes[side];
+  function setHover(fromPane, id, on) {
+    for (const pane of Object.values(panes)) {
+      if (pane === fromPane || !elementOf(pane, id)) {
+        continue;
+      }
 
-    if (!elementOf(pane, id)) {
-      return;
-    }
+      const canvas = canvasOf(pane);
 
-    const canvas = canvasOf(pane);
-
-    if (on) {
-      canvas.addMarker(id, 'sync-hover');
-    } else if (canvas.hasMarker(id, 'sync-hover')) {
-      canvas.removeMarker(id, 'sync-hover');
+      if (on) {
+        canvas.addMarker(id, 'sync-hover');
+      } else if (canvas.hasMarker(id, 'sync-hover')) {
+        canvas.removeMarker(id, 'sync-hover');
+      }
     }
   }
 
@@ -161,37 +177,37 @@ export function createSync(panes) {
     enabled = !!value;
 
     if (enabled) {
-      if (panes.left.loaded) {
-        syncPlane('left', canvasOf(panes.left).getRootElement().id);
-      }
+      const leader = activePanes(panes)[0];
 
-      copyViewbox(panes.left, panes.right);
+      if (leader) {
+        syncPlane(leader.side, canvasOf(leader).getRootElement().id);
+        copyViewboxToOthers(leader);
+      }
     } else {
-      hideGhost(panes.left);
-      hideGhost(panes.right);
+      Object.values(panes).forEach(hideGhost);
     }
   }
 
-  for (const pane of Object.values(panes)) {
-    const side = pane.side;
+  /** Wires a pane's events to the synchronization; for a pane created after `createSync`. */
+  function attach(pane) {
     const eventBus = pane.viewer.get('eventBus');
 
-    eventBus.on('canvas.viewbox.changing', () => scheduleViewSync(side));
+    eventBus.on('canvas.viewbox.changing', () => scheduleViewSync(pane));
 
     // drilling into a collapsed subprocess (or back out through the breadcrumbs) on one side
     eventBus.on('root.set', (event) => {
-      if (enabled && !applying) {
-        syncPlane(side, event.element.id);
+      if (enabled && !applying && pane.shown) {
+        syncPlane(pane.side, event.element.id);
       }
     });
 
     eventBus.on('element.hover', (event) => {
-      if (enabled) {
-        setHover(other(side), event.element.id, true);
+      if (enabled && pane.shown) {
+        setHover(pane, event.element.id, true);
       }
     });
 
-    eventBus.on('element.out', (event) => setHover(other(side), event.element.id, false));
+    eventBus.on('element.out', (event) => setHover(pane, event.element.id, false));
 
     pane.canvasEl.addEventListener('mousemove', (event) => {
       if (enabled) {
@@ -199,8 +215,16 @@ export function createSync(panes) {
       }
     });
 
-    pane.canvasEl.addEventListener('mouseleave', () => hideGhost(panes[other(side)]));
+    pane.canvasEl.addEventListener('mouseleave', () => {
+      for (const other of Object.values(panes)) {
+        if (other !== pane) {
+          hideGhost(other);
+        }
+      }
+    });
   }
+
+  Object.values(panes).forEach(attach);
 
   return {
     get enabled() {
@@ -210,6 +234,8 @@ export function createSync(panes) {
     quietly,
     linked,
     copyViewbox,
-    syncPlane
+    copyViewboxToOthers,
+    syncPlane,
+    attach
   };
 }

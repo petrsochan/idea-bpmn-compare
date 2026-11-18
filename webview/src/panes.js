@@ -1,16 +1,16 @@
 import { setTip } from './tooltips.js';
 
 /*
- * The two diagram panes.
+ * The diagram panes, kept in an object by side in the order they appear on the page.
  *
- * Left pane  = current working copy ("new" side of the diff).
- * Right pane = selected Git revision ("old" side of the diff).
+ * Diff mode:  left = current working copy ("new" side), right = selected Git revision ("old" side).
+ * Merge mode: ours, result, base, theirs - of result and base only one is shown at a time.
+ *
+ * A pane takes part in synchronization, navigation and zoom while it is shown and has a diagram.
  */
 
-export const SIDES = [ 'left', 'right' ];
-
 /**
- * @param {string} side `left` or `right`, matching the `pane-<side>` section of the page
+ * @param {string} side e.g. `left`, matching the `pane-<side>` section of the page
  * @param {Function} Viewer the bpmn-js viewer class; passed in, so this module loads without bpmn-js
  */
 export function createPane(side, Viewer) {
@@ -25,12 +25,19 @@ export function createPane(side, Viewer) {
     messageEl: root.querySelector('.message'),
     ghostEl: root.querySelector('.ghost-cursor'),
     viewer: new Viewer({ container: canvasEl }),
-    loaded: false
+    loaded: false,
+    shown: true
   };
 }
 
-export function other(side) {
-  return side === 'left' ? 'right' : 'left';
+/** Panes that are shown and have a diagram, in page order. */
+export function activePanes(panes) {
+  return Object.values(panes).filter((pane) => pane.shown && pane.loaded);
+}
+
+/** The other active panes. */
+export function othersOf(panes, pane) {
+  return activePanes(panes).filter((p) => p !== pane);
 }
 
 export function canvasOf(pane) {
@@ -40,11 +47,6 @@ export function canvasOf(pane) {
 /** The element `id` of a loaded pane, or undefined. */
 export function elementOf(pane, id) {
   return pane.loaded ? pane.viewer.get('elementRegistry').get(id) : undefined;
-}
-
-/** Loaded panes, the left one first. */
-export function loadedPanes(panes) {
-  return SIDES.map((side) => panes[side]).filter((pane) => pane.loaded);
 }
 
 export function showMessage(pane, text, isError) {
@@ -102,13 +104,13 @@ export function viewOf(pane) {
   return { ...canvas.viewbox(), rootId: canvas.getRootElement().id };
 }
 
-/** Both panes show the same plane, so the same coordinates mean the same place. */
+/** Two panes show the same plane, so the same coordinates mean the same place. */
 export function onSamePlane(a, b) {
   return canvasOf(a).getRootElement().id === canvasOf(b).getRootElement().id;
 }
 
 export function resizeAll(panes) {
-  for (const pane of loadedPanes(panes)) {
+  for (const pane of activePanes(panes)) {
     canvasOf(pane).resized();
   }
 }
