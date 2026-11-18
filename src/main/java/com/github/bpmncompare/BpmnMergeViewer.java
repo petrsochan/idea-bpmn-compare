@@ -13,6 +13,8 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.EditorFactory;
 import com.intellij.openapi.editor.ScrollType;
+import com.intellij.openapi.editor.event.CaretEvent;
+import com.intellij.openapi.editor.event.CaretListener;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.ui.OnePixelSplitter;
@@ -34,6 +36,8 @@ final class BpmnMergeViewer implements MergeTool.MergeViewer {
 
     private final MergeTool.MergeViewer text;
     private final Document result;
+    /** The caret is being moved by the diagrams, not by the user. */
+    private boolean revealing;
     private final BpmnMergePanel diagrams;
     private final OnePixelSplitter splitter = new OnePixelSplitter(true, SPLITTER_KEY, DEFAULT_DIAGRAMS_PROPORTION);
 
@@ -47,6 +51,21 @@ final class BpmnMergeViewer implements MergeTool.MergeViewer {
         this.result = request.getOutputContent().getDocument();
         this.diagrams = new BpmnMergePanel(sideTexts, request.getContentTitles(), result, this::revealInResult);
         splitter.setSecondComponent(text.getComponent());
+
+        // the other direction: the caret in the result column selects its element in the diagrams
+        EditorFactory.getInstance().getEventMulticaster().addCaretListener(new CaretListener() {
+            @Override
+            public void caretPositionChanged(@NotNull CaretEvent event) {
+                Editor editor = event.getEditor();
+                if (!revealing && editor.getDocument() == result && isInTextMerge(editor)) {
+                    diagrams.caretMovedInResult(editor.getCaretModel().getOffset());
+                }
+            }
+        }, diagrams);
+    }
+
+    private boolean isInTextMerge(Editor editor) {
+        return SwingUtilities.isDescendingFrom(editor.getComponent(), text.getComponent());
     }
 
     @Override
@@ -88,12 +107,18 @@ final class BpmnMergeViewer implements MergeTool.MergeViewer {
             return;
         }
         for (Editor editor : EditorFactory.getInstance().getEditors(result)) {
-            if (SwingUtilities.isDescendingFrom(editor.getComponent(), text.getComponent())) {
+            if (isInTextMerge(editor)) {
                 // the focus stays in the diagrams, where F7 keeps stepping; a caret alone is not drawn in an
                 // editor without focus, the selected line is
                 int line = result.getLineNumber(offset);
-                editor.getCaretModel().moveToOffset(offset);
-                editor.getSelectionModel().setSelection(result.getLineStartOffset(line), result.getLineEndOffset(line));
+                diagrams.caretPlacedOn(id);
+                revealing = true;
+                try {
+                    editor.getCaretModel().moveToOffset(offset);
+                    editor.getSelectionModel().setSelection(result.getLineStartOffset(line), result.getLineEndOffset(line));
+                } finally {
+                    revealing = false;
+                }
                 editor.getScrollingModel().scrollToCaret(ScrollType.CENTER);
                 return;
             }

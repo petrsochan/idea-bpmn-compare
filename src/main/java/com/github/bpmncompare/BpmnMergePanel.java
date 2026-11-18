@@ -12,6 +12,7 @@ import com.intellij.ui.components.JBLabel;
 import com.intellij.util.Alarm;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
@@ -31,6 +32,8 @@ import java.util.function.Consumer;
 final class BpmnMergePanel extends JPanel implements Disposable {
 
     private static final int RESULT_UPDATE_DELAY_MS = 300;
+    /** Moving the caret through the XML must not flood the page with one selection per position. */
+    private static final int CARET_SELECT_DELAY_MS = 250;
     private static final String RESULT_LABEL = "Result";
 
     private final List<String> sideTexts;
@@ -39,6 +42,9 @@ final class BpmnMergePanel extends JPanel implements Disposable {
     private final BpmnWebView webView = new BpmnWebView(this, this::pushAll, this::handleHostRequest);
     private final Consumer<String> revealInResult;
     private final Alarm resultAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
+    private final Alarm caretAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
+    /** The element the result column's caret was last in, so moving within it selects nothing new. */
+    private @Nullable String caretElement;
     private final JBCheckBox syncBox = new JBCheckBox("Synchronize mouse & view", BpmnCompareSettings.isSyncEnabled());
 
     private boolean initialized;
@@ -120,6 +126,30 @@ final class BpmnMergePanel extends JPanel implements Disposable {
                 // the merge view has no element menu, SVG/PNG export or XML navigation
             }
         }
+    }
+
+    /**
+     * The result column's caret is at {@code offset}: shortly after, select and centre the element it is in,
+     * when that is another element than before.
+     */
+    void caretMovedInResult(int offset) {
+        if (!live) {
+            return;
+        }
+        caretAlarm.cancelAllRequests();
+        caretAlarm.addRequest(() -> {
+            String id = BpmnXmlLocator.elementIdAt(result.getText(), offset);
+            if (id != null && !id.equals(caretElement)) {
+                caretElement = id;
+                webView.call("selectElement", id);
+            }
+        }, CARET_SELECT_DELAY_MS, webView.modality());
+    }
+
+    /** The diagrams moved the caret to {@code id} themselves; it is not a new place to show. */
+    void caretPlacedOn(String id) {
+        caretElement = id;
+        caretAlarm.cancelAllRequests();
     }
 
     private void pushAll() {

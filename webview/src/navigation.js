@@ -13,7 +13,8 @@ const FOCUS_MARK_MS = 1500;
  * @param {Object<string, object>} options.panes by side
  * @param {ReturnType<import('./sync.js').createSync>} options.sync
  * @param {() => object[]} options.visibleChanges changes the user can see, in change-list order
- * @param {(id: string | null) => void} options.onSelect the change stepping is on now
+ * @param {(id: string | null, how: { fromHost: boolean }) => void} options.onSelect the change stepping is on
+ *   now; `fromHost` when the IDE selected it
  * @param {() => void} options.repaint
  */
 export function createNavigation({ panes, sync, visibleChanges, onSelect, repaint }) {
@@ -44,10 +45,13 @@ export function createNavigation({ panes, sync, visibleChanges, onSelect, repain
     focusElement(changes[next].id);
   }
 
-  /** Selects and centres an element, driven by the caret position in the XML editor. */
+  /**
+   * Selects and centres an element, driven by the caret position in the XML editor. The host already
+   * knows where its caret is, so the selection is not reported back as one to show there.
+   */
   function selectElement(id) {
     if (id && activePanes(panes).length) {
-      focusElement(id);
+      focusElement(id, { fromHost: true });
     }
   }
 
@@ -58,9 +62,10 @@ export function createNavigation({ panes, sync, visibleChanges, onSelect, repain
     setBarButtonState('change-next', inactive, 'Next change (F7)', 'No change to step to');
   }
 
-  function focusElement(id) {
+  /** @param {{ fromHost?: boolean }} [options] `fromHost` when the IDE asked for it, see selectElement */
+  function focusElement(id, { fromHost = false } = {}) {
     selectedId = id;
-    onSelect(id);
+    onSelect(id, { fromHost });
 
     const targets = activePanes(panes).filter((pane) => elementOf(pane, id));
 

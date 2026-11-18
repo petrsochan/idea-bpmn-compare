@@ -43,7 +43,8 @@ Visual comparison of BPMN diagrams with any Git revision, powered by [bpmn.io](h
   the base are highlighted; elements both sides changed are outlined in every diagram – loudly while the
   conflict is open – and listed first, with a *Conflicts* chip counting the open ones. The result diagram follows
   every Accept, Apply and edit and shows which side each change was taken from. F7, a click on an element or on
-  a change-list row puts the result column's caret on that element. Resolving stays in the text merge; *Show BPMN Diagrams* in its toolbar hides the diagrams (remembered).
+  a change-list row puts the result column's caret on that element, and moving the caret there selects the element
+  in the diagrams. *Export* copies the change list of the merge as Markdown. Resolving stays in the text merge; *Show BPMN Diagrams* in its toolbar hides the diagrams (remembered).
   The diagrams help with merging smaller changes – a few renamed, moved or added elements; they make no claim to
   untangle complex merges, where the text merge remains the tool.
 - **Conflict in the BPMN Diff tab** – while the file is in conflict (after a merge or rebase on the command line,

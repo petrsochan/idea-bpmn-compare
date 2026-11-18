@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import {
-  CURRENT, REVISION, badge, breadcrumbs, changeListIds, element, openFixtures, openMerge, rendered, selectedChange,
+  CURRENT, REVISION, badge, breadcrumbs, callHost, changeListIds, element, openFixtures, openMerge, rendered, selectedChange,
   sentToHost, setResult, showDiagrams, showMerge, viewbox
 } from './view.js';
 
@@ -458,6 +458,16 @@ test.describe('merge view: the text merge follows', () => {
 
     await page.locator('#pane-ours .canvas').click({ position: { x: 5, y: 5 } });
 
+    expect(await revealed(page)).toEqual([]);
+  });
+
+  test('an element selected from the result column is centred and not sent back', async ({ page }) => {
+    await openMerge(page);
+
+    await callHost(page, 'selectElement', 'Task_Ship');
+
+    expect(await selectedChange(page)).toEqual([ 'Task_Ship' ]);
+    await expect(element(page, 'theirs', 'Task_Ship')).toHaveClass(/diff-focus/);
     expect(await revealed(page)).toEqual([]);
   });
 

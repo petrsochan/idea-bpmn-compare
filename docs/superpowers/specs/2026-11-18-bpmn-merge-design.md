@@ -48,8 +48,8 @@ Of the improvement ideas this one brings the most and costs the most.
 - Resolving in the diagrams (accept a side per element, edit). The text merge does that.
 - Following the text merge from the diagrams' side only (added after the first sandbox check, at the user's
   request): F7, a click on a change-list row or on an element in a diagram puts the caret of the result column
-  on that element and selects its line; the focus stays in the diagrams. Selecting a chunk in the text does
-  not move the diagrams.
+  on that element and selects its line; the focus stays in the diagrams. Added later, also at the user's
+  request: moving the caret in the result column selects and centres its element in the diagrams.
 - Showing the conflict outside the merge window (from the conflicted file's index stages `:1:/:2:/:3:`) –
   a later step that reuses this work.
 - Export to Markdown/SVG/PNG and element history in the merge view.

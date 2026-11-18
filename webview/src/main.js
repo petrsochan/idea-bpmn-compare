@@ -77,11 +77,12 @@ const navigation = createNavigation({
   panes,
   sync,
   visibleChanges,
-  onSelect: (id) => {
+  onSelect: (id, { fromHost }) => {
     changeList.markSelected(id);
 
-    // in the merge window the text merge's result column follows the element stepped to
-    if (inMerge() && id) {
+    // in the merge window the text merge's result column follows the element stepped to - unless the
+    // result column's caret chose it, which would only bounce the caret
+    if (inMerge() && id && !fromHost) {
       revealInResult(id);
     }
   },
