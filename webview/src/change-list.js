@@ -109,7 +109,7 @@ export function createChangeList({ onPick, onToggle }) {
       document.querySelector('.chip.' + kind + ' b').textContent = counts[kind];
     }
 
-    document.querySelector('.chip.conflict b').textContent = open + ' / ' + both;
+    document.querySelector('.chip.conflict b').textContent = open + ' / ' + both + ' open';
     document.getElementById('summary-note').textContent = note || (entries.length ? '' : 'No differences');
   }
 

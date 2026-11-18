@@ -151,6 +151,44 @@ test.describe('merge view: the result', () => {
     await expect(notice).toHaveText('');
   });
 
+  test('a result with dangling references is drawn with a notice', async ({ page }) => {
+    await openMerge(page);
+    const notice = page.locator('#pane-result .notice');
+
+    await setResult(page, REVISION.replace('targetRef="Task_Ship"', 'targetRef="Nowhere"'));
+
+    await expect(element(page, 'result', 'Task_Ship')).toHaveCount(1);
+    await expect(notice).toHaveText(/^The result has \d+ problems? – parts of it may not be drawn\.$/);
+  });
+
+  test('quick result updates behind a running render are rendered once', async ({ page }) => {
+    await openMerge(page);
+    const before = await page.evaluate(() => Number(document.body.dataset.renders));
+
+    await page.evaluate(([ a, b, c ]) => {
+      window.bpmnCompare.setMergeResult({ xml: a, label: 'Result' });
+      window.bpmnCompare.setMergeResult({ xml: b, label: 'Result' });
+      window.bpmnCompare.setMergeResult({ xml: c, label: 'Result' });
+    }, [ CURRENT, REVISION, CURRENT ]);
+    await page.waitForFunction(() => !window.bpmnCompare.isRendering());
+
+    // the first starts at once, the other two wait behind it and collapse into one
+    expect(await page.evaluate(() => Number(document.body.dataset.renders))).toBe(before + 2);
+    await expect(element(page, 'result', 'Task_Supplier')).toHaveCount(1);
+  });
+
+  test('the still-base marker is visible in the dark theme too', async ({ page }) => {
+    await openMerge(page, { result: { xml: CURRENT, label: 'Result' } });
+    const stroke = () => page.locator('#pane-result .djs-element[data-element-id="Task_Ship"] .djs-visual > :nth-child(1)')
+      .evaluate((node) => getComputedStyle(node).stroke);
+
+    const light = await stroke();
+    await page.evaluate(() => window.bpmnCompare.setTheme({ dark: true }));
+
+    expect(await stroke()).toBe(light);
+    expect(light).toBe('rgb(110, 110, 110)');
+  });
+
   test('an unparsable side leaves the others working', async ({ page }) => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err));
@@ -213,11 +251,11 @@ test.describe('merge view: highlights and the change list', () => {
     const chip = page.locator('#summary .chip.conflict');
 
     await expect(chip).toBeVisible();
-    await expect(chip).toHaveText(/Conflicts\s*3 \/ 3/);
+    await expect(chip).toHaveText(/Conflicts\s*3 \/ 3 open/);
 
     await setResult(page, CURRENT);
 
-    await expect(chip).toHaveText(/Conflicts\s*0 \/ 3/);
+    await expect(chip).toHaveText(/Conflicts\s*0 \/ 3 open/);
   });
 
   test('the kind chips count the one-sided changes', async ({ page }) => {

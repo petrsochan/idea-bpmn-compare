@@ -1,6 +1,5 @@
 import NavigatedViewer from 'bpmn-js/lib/NavigatedViewer';
 import { diff } from 'bpmn-js-differ';
-import { BpmnModdle } from 'bpmn-moddle';
 
 import { createChangeList } from './change-list.js';
 import { toChangeList } from './changes.js';
@@ -107,7 +106,6 @@ const mergeView = createMergeView({
   sync,
   zoom,
   Viewer: NavigatedViewer,
-  parse: (xml) => new BpmnModdle().fromXML(xml),
   onElementClick: (id) => revealInResult(id),
   onRendered: (merge) => {
     // the order is set when a merge is shown and kept while the user resolves it: rows that jumped

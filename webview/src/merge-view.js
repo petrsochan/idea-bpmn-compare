@@ -23,12 +23,11 @@ const INVALID_RESULT = 'The result is not valid BPMN right now – showing the l
  * @param {ReturnType<import('./sync.js').createSync>} options.sync
  * @param {ReturnType<import('./zoom.js').createZoom>} options.zoom
  * @param {Function} options.Viewer the bpmn-js viewer class
- * @param {(xml: string) => Promise} options.parse rejects for XML that is not BPMN
  * @param {(merge: { entries, states, resultChanges, fresh, note }) => void} options.onRendered after every render;
  *   `fresh` for a new merge, `note` says why the changes are incomplete ('' when they are not)
  * @param {(id: string) => void} options.onElementClick an element (or its label) was clicked in a merge pane
  */
-export function createMergeView({ panes, sync, zoom, Viewer, parse, onRendered, onElementClick }) {
+export function createMergeView({ panes, sync, zoom, Viewer, onRendered, onElementClick }) {
   let middle = 'result';
 
   /** Definitions and elements of ours, base and theirs, and the entries computed from them. */
@@ -197,7 +196,7 @@ export function createMergeView({ panes, sync, zoom, Viewer, parse, onRendered, 
   }
 
   async function importResult(spec) {
-    const { defs, warnings, kept } = await importKeepingLast(panes.result, spec, parse);
+    const { defs, warnings, kept } = await importKeepingLast(panes.result, spec);
     const notice = panes.result.root.querySelector('.notice');
 
     let text = '';

@@ -88,36 +88,40 @@ export async function importInto(pane, spec) {
  * Like {@link importInto}, but XML that does not parse leaves the diagram that is shown in place - for
  * content that is being edited, which is invalid for a moment between keystrokes.
  *
- * @param {(xml: string) => Promise} parse rejects for XML that is not BPMN
+ * bpmn-js parses before it touches the canvas, so a parse error leaves the shown diagram and its
+ * definitions as they were; the XML is parsed only once.
+ *
  * @returns `{ defs, warnings, kept }` - `kept` when the XML did not parse and the shown diagram stayed
  */
-export async function importKeepingLast(pane, spec, parse) {
-  if (spec.xml && pane.loaded) {
-    try {
-      await parse(spec.xml);
-    } catch (err) {
-      return { defs: pane.viewer.getDefinitions(), warnings: [], kept: true };
-    }
-  }
-
-  pane.labelEl.textContent = spec.label || '';
-  setTip(pane.labelEl, spec.label || '');
-
+export async function importKeepingLast(pane, spec) {
   if (!spec.xml) {
     return { defs: await importInto(pane, spec), warnings: [], kept: false };
   }
 
+  const shown = pane.loaded ? pane.viewer.getDefinitions() : null;
+
   try {
     const { warnings } = await pane.viewer.importXML(spec.xml);
     pane.loaded = true;
+    setLabel(pane, spec.label);
     showMessage(pane, '');
     return { defs: pane.viewer.getDefinitions(), warnings: warnings || [], kept: false };
   } catch (err) {
+    if (shown && pane.viewer.getDefinitions() === shown) {
+      return { defs: shown, warnings: [], kept: true };
+    }
+
     pane.viewer.clear();
     pane.loaded = false;
+    setLabel(pane, spec.label);
     showMessage(pane, 'Cannot render diagram:\n' + (err && err.message || err), true);
     return { defs: null, warnings: [], kept: false };
   }
+}
+
+function setLabel(pane, label) {
+  pane.labelEl.textContent = label || '';
+  setTip(pane.labelEl, label || '');
 }
 
 /** Business objects of every drawn element except the planes and labels, by id. */

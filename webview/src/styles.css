@@ -18,6 +18,8 @@
   --both: #8a6d3b;
   --result-ours: #1f7aa8;
   --result-theirs: #8f4cc9;
+  /* not --muted: that one lightens in the dark theme, and the diagram surface stays light */
+  --result-base: #6e6e6e;
 }
 
 :root[data-theme="dark"] {
@@ -400,7 +402,7 @@ body:not([data-mode="merge"]) .chip.conflict { display: none; }
 .djs-connection.result-theirs .djs-visual > path { stroke: var(--result-theirs) !important; stroke-width: 2.5px !important; }
 .djs-shape.result-both .djs-visual > :nth-child(1) { stroke: var(--added) !important; stroke-width: 2.5px !important; }
 .djs-connection.result-both .djs-visual > path { stroke: var(--added) !important; stroke-width: 2.5px !important; }
-.djs-shape.result-base .djs-visual > :nth-child(1) { stroke: var(--muted) !important; stroke-width: 2px !important; stroke-dasharray: 4 3 !important; }
-.djs-connection.result-base .djs-visual > path { stroke: var(--muted) !important; stroke-width: 2px !important; stroke-dasharray: 4 3 !important; }
+.djs-shape.result-base .djs-visual > :nth-child(1) { stroke: var(--result-base) !important; stroke-width: 2px !important; stroke-dasharray: 4 3 !important; }
+.djs-connection.result-base .djs-visual > path { stroke: var(--result-base) !important; stroke-width: 2px !important; stroke-dasharray: 4 3 !important; }
 .djs-shape.result-other .djs-visual > :nth-child(1) { stroke: var(--changed) !important; stroke-width: 2.5px !important; }
 .djs-connection.result-other .djs-visual > path { stroke: var(--changed) !important; stroke-width: 2.5px !important; }

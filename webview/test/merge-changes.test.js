@@ -245,3 +245,11 @@ test('describeMerge without a result change leaves the result out', async () => 
   assert.equal(describeMerge(byId.Task_Check, null),
     'name: "Check stock" → ours "Verify availability", theirs "Check warehouse stock"');
 });
+
+test('describeMerge says when the result removed the element', async () => {
+  const { byId } = await merge(BASE, OURS, THEIRS);
+  const removed = { id: 'Task_Check', kinds: new Set([ 'removed' ]), attrs: null };
+
+  assert.equal(describeMerge(byId.Task_Check, removed),
+    'name: "Check stock" → ours "Verify availability", theirs "Check warehouse stock", result removed');
+});

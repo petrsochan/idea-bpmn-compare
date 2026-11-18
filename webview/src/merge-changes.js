@@ -174,7 +174,9 @@ export function describeMerge(entry, resultChange, hasResult = resultChange !== 
       }
     }
 
-    if (hasResult) {
+    if (hasResult && resultChange && resultChange.kinds.has('removed')) {
+      values.push('result removed');
+    } else if (hasResult) {
       const changed = resultChange && resultChange.attrs && key in resultChange.attrs;
       values.push('result ' + formatValue(changed ? resultChange.attrs[key].newValue : base));
     }
