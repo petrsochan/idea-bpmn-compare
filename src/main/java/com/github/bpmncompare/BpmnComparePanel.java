@@ -1,8 +1,6 @@
 package com.github.bpmncompare;
 
 import com.intellij.icons.AllIcons;
-import com.intellij.ide.BrowserUtil;
-import com.intellij.ide.ui.LafManagerListener;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
@@ -34,27 +32,16 @@ import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileWrapper;
-import com.intellij.ui.ColorUtil;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.awt.RelativePoint;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
-import com.intellij.ui.jcef.JBCefApp;
-import com.intellij.ui.jcef.JBCefBrowser;
-import com.intellij.ui.jcef.JBCefBrowserBase;
-import com.intellij.ui.jcef.JBCefJSQuery;
 import com.intellij.util.Alarm;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import git4idea.repo.GitRepository;
 import git4idea.repo.GitRepositoryChangeListener;
 import git4idea.repo.GitRepositoryManager;
-import org.cef.browser.CefBrowser;
-import org.cef.browser.CefFrame;
-import org.cef.handler.CefLifeSpanHandlerAdapter;
-import org.cef.handler.CefLoadHandlerAdapter;
-import org.cef.handler.CefRequestHandlerAdapter;
-import org.cef.network.CefRequest;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -103,10 +90,8 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     private final JBCheckBox followCaretBox =
             new JBCheckBox("Follow caret", BpmnCompareSettings.isFollowCaretEnabled());
 
-    private JBCefBrowser browser;
-    private JBCefJSQuery hostQuery;
+    private final BpmnWebView webView = new BpmnWebView(this, () -> pushAll(false), this::handleHostRequest);
     private boolean initialized;
-    private boolean pageReady;
     private volatile boolean disposed;
 
     private BpmnContentSource leftSource;
@@ -144,6 +129,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         this.leftSide = DiagramSide.message("Loading " + left.label() + "…");
         this.rightSide = DiagramSide.message("Loading " + right.label() + "…");
         add(createToolbar(), BorderLayout.NORTH);
+        Disposer.register(this, webView);
     }
 
     /** Creates the browser lazily, when the editor tab is shown for the first time. */
@@ -153,36 +139,14 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         }
         initialized = true;
 
-        if (!JBCefApp.isSupported()) {
+        JComponent page = webView.create();
+        if (page == null) {
             add(centeredLabel("JCEF (embedded Chromium) is not available in this IDE runtime."), BorderLayout.CENTER);
             revalidate();
             return;
         }
-
-        browser = JBCefBrowser.createBuilder().build();
-        Disposer.register(this, browser);
-        installHostBridge();
-        browser.getJBCefClient().addLoadHandler(new CefLoadHandlerAdapter() {
-            @Override
-            public void onLoadEnd(CefBrowser cefBrowser, CefFrame frame, int httpStatusCode) {
-                if (frame.isMain()) {
-                    ApplicationManager.getApplication().invokeLater(() -> {
-                        pageReady = true;
-                        pushAll(false);
-                    }, o -> disposed);
-                }
-            }
-        }, browser.getCefBrowser());
-        openExternalLinksInSystemBrowser();
-        add(browser.getComponent(), BorderLayout.CENTER);
+        add(page, BorderLayout.CENTER);
         revalidate();
-
-        try {
-            browser.loadURL(WebviewResources.indexUrl());
-        } catch (IOException e) {
-            LOG.error("Cannot prepare BPMN compare web view", e);
-            return;
-        }
 
         // only a live working copy changes under us; the fixed content of a diff window does not
         Document document = leftSource instanceof BpmnContentSource.Working ? documentOfFile() : null;
@@ -197,14 +161,12 @@ final class BpmnComparePanel extends JPanel implements Disposable {
             followTheCaret(document);
         }
 
-        ApplicationManager.getApplication().getMessageBus().connect(this)
-                .subscribe(LafManagerListener.TOPIC, source -> pushTheme());
         subscribeToGitChanges();
         // the quick repository lookup knows no repository until the IDE has mapped them, which right after
         // start-up is later than the page loads - without this the history would stay "not under Git"
         project.getMessageBus().connect(this).subscribe(VcsRepositoryManager.VCS_REPOSITORY_MAPPING_UPDATED,
                 (VcsRepositoryMappingListener) () -> ApplicationManager.getApplication()
-                        .invokeLater(this::pushHistoryAvailability, o -> disposed));
+                        .invokeLater(this::pushHistoryAvailability, webView.modality(), o -> disposed));
 
         reloadBothSides();
     }
@@ -228,7 +190,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
                         // a rebase fires a burst of these; only the last one needs to do the work
                         gitAlarm.cancelAllRequests();
                         gitAlarm.addRequest(() -> reloadSide(Side.RIGHT, rightSource, true), GIT_UPDATE_DELAY_MS);
-                    }, o -> disposed);
+                    }, webView.modality(), o -> disposed);
                 });
     }
 
@@ -240,32 +202,8 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     // web view -> IDE bridge
     // ------------------------------------------------------------------------------------------------------------
 
-    /**
-     * Gives the page a {@code window.bpmnCompareHost(message)} function for talking back to the IDE.
-     *
-     * <p>Registered before the handler that marks the page ready, because CEF calls load handlers in
-     * registration order and the page must have the bridge by the time it is told it can use it.
-     */
-    private void installHostBridge() {
-        hostQuery = JBCefJSQuery.create((JBCefBrowserBase) browser);
-        Disposer.register(this, hostQuery);
-        hostQuery.addHandler(request -> {
-            handleHostRequest(request);
-            return null;
-        });
-        browser.getJBCefClient().addLoadHandler(new CefLoadHandlerAdapter() {
-            @Override
-            public void onLoadEnd(CefBrowser cefBrowser, CefFrame frame, int httpStatusCode) {
-                if (frame.isMain()) {
-                    executeScript("window.bpmnCompareHost = function(message) {"
-                            + hostQuery.inject("JSON.stringify(message)") + "};");
-                }
-            }
-        }, browser.getCefBrowser());
-    }
-
-    private void handleHostRequest(String json) {
-        Map<String, Object> message = Json.read(json);
+    /** A message from the page; called on the browser thread. */
+    private void handleHostRequest(Map<String, Object> message) {
         String command = String.valueOf(message.get("command"));
         String payload = String.valueOf(message.get("payload"));
         switch (command) {
@@ -287,7 +225,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     }
 
     private void onEdt(Runnable action) {
-        ApplicationManager.getApplication().invokeLater(action, o -> disposed);
+        webView.onEdt(action);
     }
 
     /** Asks for a target file and writes the exported bytes there. */
@@ -336,7 +274,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     }
 
     private void selectElementAt(Document document, int offset) {
-        if (!pageReady) {
+        if (!webView.isReady()) {
             return;
         }
         String id = BpmnXmlLocator.elementIdAt(document.getText(), offset);
@@ -355,11 +293,11 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         // each pane reads the history of its own file - in a diff of two files they differ
         VirtualFile file = "right".equals(message.get("side")) ? rightFile : this.file;
         GitRepository repository = file == null ? null : GitRevisions.repositoryFor(project, file);
-        if (history != null || repository == null || browser == null) {
+        if (history != null || repository == null || webView.component() == null) {
             return;
         }
         Point point = new Point(parseInt(message.get("x")), parseInt(message.get("y")));
-        RelativePoint anchor = new RelativePoint(browser.getComponent(), point);
+        RelativePoint anchor = new RelativePoint(webView.component(), point);
         String id = String.valueOf(message.get("id"));
         String name = String.valueOf(message.get("name"));
         ElementHistory run = ElementHistory.create(project, file, repository, id, name,
@@ -383,7 +321,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
 
     /** Tells the page, per pane, whether its element menu can offer the history, and if not, why. */
     private void pushHistoryAvailability() {
-        if (!pageReady) {
+        if (!webView.isReady()) {
             return;
         }
         Map<String, Object> state = new LinkedHashMap<>();
@@ -415,37 +353,6 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         int offset = BpmnXmlLocator.offsetOfElement(document.getText(), id);
         if (offset >= 0) {
             new OpenFileDescriptor(project, file, offset).navigate(true);
-        }
-    }
-
-    /**
-     * Links leaving the local page (e.g. the bpmn.io watermark required by the bpmn-js license) open in the
-     * system browser instead of replacing the diff view or spawning a bare Chromium window.
-     */
-    private void openExternalLinksInSystemBrowser() {
-        browser.getJBCefClient().addLifeSpanHandler(new CefLifeSpanHandlerAdapter() {
-            @Override
-            public boolean onBeforePopup(CefBrowser cefBrowser, CefFrame frame, String targetUrl, String targetFrameName) {
-                browseExternally(targetUrl);
-                return true;
-            }
-        }, browser.getCefBrowser());
-        browser.getJBCefClient().addRequestHandler(new CefRequestHandlerAdapter() {
-            @Override
-            public boolean onBeforeBrowse(CefBrowser cefBrowser, CefFrame frame, CefRequest request, boolean userGesture, boolean isRedirect) {
-                String url = request.getURL();
-                if (url != null && (url.startsWith("http://") || url.startsWith("https://"))) {
-                    browseExternally(url);
-                    return true;
-                }
-                return false;
-            }
-        }, browser.getCefBrowser());
-    }
-
-    private static void browseExternally(String url) {
-        if (url != null && (url.startsWith("http://") || url.startsWith("https://"))) {
-            BrowserUtil.browse(url);
         }
     }
 
@@ -631,6 +538,12 @@ final class BpmnComparePanel extends JPanel implements Disposable {
      */
     private void reloadSide(Side side, BpmnContentSource source, boolean preserveView) {
         int request = requests.merge(side, 1, Integer::sum);
+        // text the platform already loaded needs no background task - whose completion, in a modal
+        // window, would wait for the window to close
+        if (source instanceof BpmnContentSource.Fixed) {
+            applyLoaded(side, request, source.load(), preserveView);
+            return;
+        }
         pushStatus(side.key(), "Loading " + source.label() + "…");
 
         new Task.Backgroundable(project, "Loading " + source.label(), false) {
@@ -643,18 +556,22 @@ final class BpmnComparePanel extends JPanel implements Disposable {
 
             @Override
             public void onSuccess() {
-                // a newer request for this side has been started meanwhile - its result wins
-                if (request != requests.get(side) || disposed) {
-                    return;
-                }
-                if (side == Side.LEFT) {
-                    leftSide = result;
-                } else {
-                    rightSide = result;
-                }
-                pushDiagrams(preserveView);
+                applyLoaded(side, request, result, preserveView);
             }
         }.queue();
+    }
+
+    private void applyLoaded(Side side, int request, DiagramSide result, boolean preserveView) {
+        // a newer request for this side has been started meanwhile - its result wins
+        if (request != requests.get(side) || disposed) {
+            return;
+        }
+        if (side == Side.LEFT) {
+            leftSide = result;
+        } else {
+            rightSide = result;
+        }
+        pushDiagrams(preserveView);
     }
 
     // ------------------------------------------------------------------------------------------------------------
@@ -669,7 +586,7 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     }
 
     private void pushDiagrams(boolean preserveView) {
-        if (!pageReady) {
+        if (!webView.isReady()) {
             return;
         }
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -693,52 +610,38 @@ final class BpmnComparePanel extends JPanel implements Disposable {
 
     /** Steps the web view to the next (+1) or previous (-1) visible change. */
     void goToChange(int step) {
-        if (pageReady) {
+        if (webView.isReady()) {
             call("goToChange", step);
         }
     }
 
     private void pushSync() {
-        if (pageReady) {
+        if (webView.isReady()) {
             call("setSync", syncBox.isSelected());
         }
     }
 
     private void pushTheme() {
-        if (!pageReady) {
-            return;
-        }
-        Map<String, Object> theme = new LinkedHashMap<>();
-        theme.put("dark", !JBColor.isBright());
-        theme.put("bg", "#" + ColorUtil.toHex(UIUtil.getPanelBackground()));
-        theme.put("fg", "#" + ColorUtil.toHex(UIUtil.getLabelForeground()));
-        theme.put("border", "#" + ColorUtil.toHex(JBColor.border()));
-        call("setTheme", theme);
+        webView.pushTheme();
     }
 
     private void pushStatus(String side, String text) {
-        if (!pageReady) {
+        if (!webView.isReady()) {
             return;
         }
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("side", side);
         args.put("text", text);
-        executeScript("window.bpmnCompare && (a => window.bpmnCompare.setStatus(a.side, a.text, false))(" + Json.write(args) + ");");
+        webView.execute("window.bpmnCompare && (a => window.bpmnCompare.setStatus(a.side, a.text, false))(" + Json.write(args) + ");");
     }
 
     private void call(String function, Object argument) {
-        executeScript("window.bpmnCompare && window.bpmnCompare." + function + "(" + Json.write(argument) + ");");
-    }
-
-    private void executeScript(String script) {
-        CefBrowser cefBrowser = browser.getCefBrowser();
-        cefBrowser.executeJavaScript(script, cefBrowser.getURL(), 0);
+        webView.call(function, argument);
     }
 
     @Override
     public void dispose() {
         disposed = true;
-        pageReady = false;
         // the page is gone: a running history would wait for answers that never come
         ElementHistory running = history;
         if (running != null) {
