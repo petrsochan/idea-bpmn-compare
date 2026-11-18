@@ -5,6 +5,11 @@ import { setTip } from './tooltips.js';
 
 const FILTER_KEY = 'bpmnCompare.visibleKinds';
 
+/** What the chips filter: the change kinds, and in merge mode the elements both sides changed. */
+const FILTERS = [ ...KINDS, 'conflict' ];
+
+const CHIP_TIPS = { conflict: 'elements both sides changed' };
+
 /**
  * The filter chips of the top bar: which change kinds are shown. The choice is remembered across views.
  *
@@ -21,7 +26,7 @@ export function createFilter(onChange) {
 
       chip.classList.toggle('off', !on);
       chip.setAttribute('aria-pressed', String(on));
-      setTip(chip, (on ? 'Hide ' : 'Show ') + KIND_LABEL[kind].toLowerCase() + ' elements'
+      setTip(chip, (on ? 'Hide ' : 'Show ') + (CHIP_TIPS[kind] || KIND_LABEL[kind].toLowerCase() + ' elements')
         + (kind === 'layout' ? ' (shifts of up to ' + LAYOUT_TOLERANCE + ' px are ignored)' : ''));
     }
   }
@@ -29,7 +34,7 @@ export function createFilter(onChange) {
   /** Shows exactly these kinds; unknown ones are ignored. */
   function set(list) {
     kinds.clear();
-    list.filter((k) => KINDS.includes(k)).forEach((k) => kinds.add(k));
+    list.filter((k) => FILTERS.includes(k)).forEach((k) => kinds.add(k));
     save(kinds);
     updateChips();
     onChange();
@@ -60,19 +65,27 @@ function load() {
     const stored = JSON.parse(localStorage.getItem(FILTER_KEY));
 
     if (Array.isArray(stored)) {
-      return new Set(stored.filter((k) => KINDS.includes(k)));
+      const kinds = new Set(stored.filter((k) => FILTERS.includes(k)));
+
+      // a filter stored before the conflict chip existed shows conflicts
+      if (!stored.includes('conflict-off')) {
+        kinds.add('conflict');
+      }
+
+      return kinds;
     }
   } catch (err) {
 
     // storage unavailable - fall back to showing everything
   }
 
-  return new Set(KINDS);
+  return new Set(FILTERS);
 }
 
 function save(kinds) {
   try {
-    localStorage.setItem(FILTER_KEY, JSON.stringify([ ...kinds ]));
+    // 'conflict-off' tells a hidden conflict chip from a filter stored before the chip existed
+    localStorage.setItem(FILTER_KEY, JSON.stringify([ ...kinds, ...(kinds.has('conflict') ? [] : [ 'conflict-off' ]) ]));
   } catch (err) {
 
     // not persisted, filter still works for this session

@@ -13,6 +13,11 @@
   --changed: #d88a00;
   --changed-fill: #fdedc8;
   --layout: #6e56cf;
+  /* merge view: an element both sides changed, and where the result stands */
+  --conflict: #c0136b;
+  --both: #8a6d3b;
+  --result-ours: #1f7aa8;
+  --result-theirs: #8f4cc9;
 }
 
 :root[data-theme="dark"] {
@@ -77,6 +82,7 @@ button.chip:hover { border-color: var(--accent); }
 .chip.removed i { background: var(--removed); }
 .chip.changed i { background: var(--changed); }
 .chip.layout i { background: var(--layout); }
+.chip.conflict i { background: var(--conflict); }
 .chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
 
 #summary-note { color: var(--muted); margin-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -166,6 +172,7 @@ body:not([data-mode="merge"]) .merge-pane { display: none; }
 body[data-mode="merge"] #pane-left,
 body[data-mode="merge"] #pane-right,
 body[data-mode="merge"] #export-wrap { display: none; }
+body:not([data-mode="merge"]) .chip.conflict { display: none; }
 .pane[hidden] { display: none; }
 
 .pane header .notice { margin-left: auto; color: var(--removed); overflow: hidden; text-overflow: ellipsis; }
@@ -250,6 +257,13 @@ body[data-mode="merge"] #export-wrap { display: none; }
 #change-list .kind.removed { color: var(--removed); }
 #change-list .kind.changed { color: var(--changed); }
 #change-list .kind.layout { color: var(--layout); }
+#change-list li.merge { grid-template-columns: 120px minmax(120px, 1fr) 50px 110px minmax(90px, 160px); }
+#change-list li.merge .attrs { grid-column: 2 / -1; }
+#change-list .kind.conflict { color: var(--conflict); }
+#change-list .side { color: var(--muted); }
+#change-list .side.both { color: var(--fg); font-weight: 600; }
+#change-list .state { color: var(--muted); white-space: nowrap; }
+#change-list .state.open { color: var(--conflict); font-weight: 600; }
 #change-list .type { color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #change-list .attrs { grid-column: 2 / 4; color: var(--muted); font-family: ui-monospace, Consolas, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; }
 
@@ -369,3 +383,24 @@ body[data-mode="merge"] #export-wrap { display: none; }
   pointer-events: none;
   z-index: 1000;
 }
+
+/* ---- merge markers ---- */
+
+/* an element both sides changed: a thick outline over whatever the change kind drew. The conflict is the
+   loudest marker; once the result has taken a side it drops to the quieter both-changed look. */
+.djs-shape.merge-conflict .djs-visual > :nth-child(1) { stroke: var(--conflict) !important; stroke-width: 4px !important; stroke-dasharray: none !important; }
+.djs-connection.merge-conflict .djs-visual > path { stroke: var(--conflict) !important; stroke-width: 4px !important; stroke-dasharray: none !important; }
+.djs-shape.merge-both .djs-visual > :nth-child(1) { stroke: var(--both) !important; stroke-width: 3px !important; stroke-dasharray: 2 3 !important; }
+.djs-connection.merge-both .djs-visual > path { stroke: var(--both) !important; stroke-width: 3px !important; stroke-dasharray: 2 3 !important; }
+
+/* the result: which side each change was taken from */
+.djs-shape.result-ours .djs-visual > :nth-child(1) { stroke: var(--result-ours) !important; stroke-width: 2.5px !important; }
+.djs-connection.result-ours .djs-visual > path { stroke: var(--result-ours) !important; stroke-width: 2.5px !important; }
+.djs-shape.result-theirs .djs-visual > :nth-child(1) { stroke: var(--result-theirs) !important; stroke-width: 2.5px !important; }
+.djs-connection.result-theirs .djs-visual > path { stroke: var(--result-theirs) !important; stroke-width: 2.5px !important; }
+.djs-shape.result-both .djs-visual > :nth-child(1) { stroke: var(--added) !important; stroke-width: 2.5px !important; }
+.djs-connection.result-both .djs-visual > path { stroke: var(--added) !important; stroke-width: 2.5px !important; }
+.djs-shape.result-base .djs-visual > :nth-child(1) { stroke: var(--muted) !important; stroke-width: 2px !important; stroke-dasharray: 4 3 !important; }
+.djs-connection.result-base .djs-visual > path { stroke: var(--muted) !important; stroke-width: 2px !important; stroke-dasharray: 4 3 !important; }
+.djs-shape.result-other .djs-visual > :nth-child(1) { stroke: var(--changed) !important; stroke-width: 2.5px !important; }
+.djs-connection.result-other .djs-visual > path { stroke: var(--changed) !important; stroke-width: 2.5px !important; }

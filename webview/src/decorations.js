@@ -31,7 +31,15 @@ export function visibleKind(change, visibleKinds) {
   return KINDS.find((k) => change.kinds.has(k) && visibleKinds.has(k));
 }
 
-function clearDecorations(panes) {
+/** Every marker the diff and the merge view draw. */
+const MARKERS = [
+  ...KINDS.flatMap((kind) => [ 'diff-' + kind, 'diff-nested-' + kind ]),
+  'merge-conflict', 'merge-both',
+  'result-ours', 'result-theirs', 'result-both', 'result-base', 'result-other'
+];
+
+/** Removes every marker and badge the diff or the merge view drew. */
+export function clearDecorations(panes) {
   for (const pane of Object.values(panes)) {
     if (!pane.loaded) {
       continue;
@@ -40,11 +48,9 @@ function clearDecorations(panes) {
     const canvas = canvasOf(pane);
 
     pane.viewer.get('elementRegistry').forEach((element) => {
-      for (const kind of KINDS) {
-        for (const marker of [ 'diff-' + kind, 'diff-nested-' + kind ]) {
-          if (canvas.hasMarker(element, marker)) {
-            canvas.removeMarker(element, marker);
-          }
+      for (const marker of MARKERS) {
+        if (canvas.hasMarker(element, marker)) {
+          canvas.removeMarker(element, marker);
         }
       }
     });
@@ -77,18 +83,35 @@ export function decorate(panes, changeList, visibleKinds) {
 
     if (kind) {
       for (const side of sidesFor(kind)) {
-        addBadge(panes[side], change, kind);
+        addBadge(panes[side], change.id, kind, tipOf(change));
       }
     }
   }
 
-  for (const pane of Object.values(panes)) {
-    markHiddenChanges(pane, changeList, visibleKinds);
+  for (const side of [ 'left', 'right' ]) {
+    const drawn = [];
+
+    for (const change of changeList) {
+      const kind = visibleKind(change, visibleKinds);
+
+      if (kind && sidesFor(kind).includes(side)) {
+        drawn.push({ id: change.id, kind });
+      }
+    }
+
+    markHiddenChanges(panes[side], drawn);
   }
 }
 
-function addBadge(pane, change, kind) {
-  const element = elementOf(pane, change.id);
+/** The tooltip of a change's badge: its kinds, its name and what changed. */
+export function tipOf(change, details = describeAttrs(change.attrs)) {
+  return [ ...change.kinds ].map((k) => KIND_LABEL[k]).join(', ') + ': ' + displayName(change)
+    + (details ? '\n\n' + details : '');
+}
+
+/** Puts a badge of `kind` with the tooltip `tip` on element `id`, when the pane has it. */
+export function addBadge(pane, id, kind, tip) {
+  const element = elementOf(pane, id);
 
   if (!element) {
     return;
@@ -97,13 +120,10 @@ function addBadge(pane, change, kind) {
   const badge = document.createElement('span');
   badge.className = 'diff-badge ' + kind;
   badge.textContent = KIND_BADGE[kind];
-
-  const details = describeAttrs(change.attrs);
-  setTip(badge, [ ...change.kinds ].map((k) => KIND_LABEL[k]).join(', ') + ': ' + displayName(change)
-    + (details ? '\n\n' + details : ''));
+  setTip(badge, tip);
 
   try {
-    pane.viewer.get('overlays').add(change.id, 'diff', {
+    pane.viewer.get('overlays').add(id, 'diff', {
       position: badgePosition(element),
       html: badge
     });
@@ -114,23 +134,15 @@ function addBadge(pane, change, kind) {
 }
 
 /**
- * Marks each collapsed subprocess that hides visible changes of this pane: a dashed outline and a
+ * Marks each collapsed subprocess that hides changes drawn on this pane: a dashed outline and a
  * count, both in the colour of the most important kind inside. Dashed, so it does not read as a
  * change of the subprocess itself.
+ *
+ * @param {{ id: string, kind: string }[]} drawn the changes drawn on the pane, each with the kind it is drawn as
  */
-function markHiddenChanges(pane, changeList, visibleKinds) {
+export function markHiddenChanges(pane, drawn) {
   if (!pane.loaded) {
     return;
-  }
-
-  const drawn = [];
-
-  for (const change of changeList) {
-    const kind = visibleKind(change, visibleKinds);
-
-    if (kind && sidesFor(kind).includes(pane.side)) {
-      drawn.push({ id: change.id, kind });
-    }
   }
 
   const hidden = hiddenChanges(drawn, (id) => rootIdOf(pane, id), (rootId) => shapeIdOfRoot(pane, rootId));

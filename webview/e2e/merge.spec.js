@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 
 import {
-  CURRENT, REVISION, breadcrumbs, element, openMerge, rendered, setResult, showDiagrams, showMerge, viewbox
+  CURRENT, REVISION, badge, breadcrumbs, changeListIds, element, openFixtures, openMerge, rendered, selectedChange,
+  setResult, showDiagrams, showMerge, viewbox
 } from './view.js';
 
 /** Both panes show the same region, as expectSameRegion checks for left/right. */
@@ -169,5 +170,135 @@ test.describe('merge view: the result', () => {
 
     await expect(page.locator('#pane-theirs header .label')).toHaveText('Changes from other');
     await expect(element(page, 'theirs', 'Task_Gift')).toHaveCount(0);
+  });
+});
+
+test.describe('merge view: highlights and the change list', () => {
+
+  test('ours and theirs show their own changes', async ({ page }) => {
+    await openMerge(page);
+
+    await expect(badge(page, 'ours', 'Task_Supplier')).toHaveClass(/added/);
+    await expect(badge(page, 'theirs', 'Task_Supplier')).toHaveCount(0);
+    await expect(badge(page, 'theirs', 'Task_Gift')).toHaveClass(/added/);
+    await expect(badge(page, 'ours', 'Task_Gift')).toHaveCount(0);
+    await expect(element(page, 'theirs', 'Task_Ship')).toHaveClass(/diff-changed/);
+  });
+
+  test('the base shows what either side removed or changed', async ({ page }) => {
+    await openMerge(page);
+    await page.locator('#pane-result [data-middle="base"]').click();
+
+    await expect(element(page, 'base', 'Task_Review')).toHaveClass(/diff-removed/);
+    await expect(element(page, 'base', 'Task_Ship')).toHaveClass(/diff-changed/);
+  });
+
+  test('a conflict is marked in every pane that has it', async ({ page }) => {
+    await openMerge(page);
+
+    for (const side of [ 'ours', 'result', 'theirs' ]) {
+      await expect(element(page, side, 'Task_Check')).toHaveClass(/merge-conflict/);
+    }
+  });
+
+  test('both changed is quieter than a conflict', async ({ page }) => {
+    await openMerge(page);
+
+    await expect(element(page, 'ours', 'End_Hold')).toHaveClass(/merge-both/);
+    await expect(element(page, 'ours', 'End_Hold')).not.toHaveClass(/merge-conflict/);
+  });
+
+  test('the conflicts chip counts open and total', async ({ page }) => {
+    await openMerge(page);
+    const chip = page.locator('#summary .chip.conflict');
+
+    await expect(chip).toBeVisible();
+    await expect(chip).toHaveText(/Conflicts\s*3 \/ 3/);
+
+    await setResult(page, CURRENT);
+
+    await expect(chip).toHaveText(/Conflicts\s*0 \/ 3/);
+  });
+
+  test('the kind chips count the one-sided changes', async ({ page }) => {
+    await openMerge(page);
+
+    // ours adds F_Supplier, F_No2, Task_Supplier, Pay_F3, Task_Receipt; theirs adds Task_Gift
+    await expect(page.locator('#summary .chip.added b')).toHaveText('6');
+  });
+
+  test('the result shows where each change stands', async ({ page }) => {
+    await openMerge(page, { result: { xml: CURRENT, label: 'Result' } });
+
+    await expect(element(page, 'result', 'Task_Check')).toHaveClass(/result-ours/);
+    await expect(element(page, 'result', 'Task_Ship')).toHaveClass(/result-base/);
+    await expect(element(page, 'result', 'Task_Check')).not.toHaveClass(/merge-conflict/);
+  });
+
+  test('the change list starts with open conflicts', async ({ page }) => {
+    await openMerge(page);
+
+    expect((await changeListIds(page)).slice(0, 3)).toEqual([ 'Task_Review', 'Task_Check', 'End_Hold' ]);
+    await expect(page.locator('#change-list li[data-change-id="Task_Check"] .side')).toHaveText('both');
+    await expect(page.locator('#change-list li[data-change-id="Task_Check"] .state')).toHaveText('open');
+    await expect(page.locator('#change-list li[data-change-id="Task_Ship"] .side')).toHaveText('theirs');
+  });
+
+  test('a resolved conflict says which side the result took', async ({ page }) => {
+    await openMerge(page, { result: { xml: CURRENT, label: 'Result' } });
+
+    await expect(page.locator('#change-list li[data-change-id="Task_Check"] .state')).toHaveText('resolved – ours');
+  });
+
+  test('F7 walks open conflicts first', async ({ page }) => {
+    await openMerge(page);
+    await page.locator('#pane-ours header').click();
+
+    await page.keyboard.press('F7');
+
+    expect(await selectedChange(page)).toEqual([ 'Task_Review' ]);
+  });
+
+  test('hiding conflicts leaves the one-sided changes', async ({ page }) => {
+    await openMerge(page);
+
+    await page.locator('#summary .chip.conflict').click();
+
+    const ids = await changeListIds(page);
+    expect(ids).not.toContain('Task_Check');
+    expect(ids).toContain('Task_Ship');
+    await expect(element(page, 'ours', 'Task_Check')).not.toHaveClass(/merge-conflict/);
+
+    await page.locator('#summary .chip.conflict').click();
+  });
+
+  test('a hidden conflicts chip stays hidden on the next merge', async ({ page }) => {
+    await openMerge(page);
+    await page.locator('#summary .chip.conflict').click();
+
+    await openMerge(page);
+
+    await expect(page.locator('#summary .chip.conflict')).toHaveClass(/off/);
+    expect(await changeListIds(page)).not.toContain('Task_Check');
+    await page.locator('#summary .chip.conflict').click();
+  });
+
+  test('the badge of a conflict lists both sides', async ({ page }) => {
+    await openMerge(page);
+
+    await expect(badge(page, 'ours', 'Task_Check')).toHaveAttribute('data-tip',
+      /name: "Check stock" → ours "Verify availability", theirs "Check warehouse stock", result "Check stock"/);
+  });
+
+  test('diff mode has no conflicts chip', async ({ page }) => {
+    await openFixtures(page);
+
+    await expect(page.locator('#summary .chip.conflict')).toBeHidden();
+
+    await showMerge(page);
+    await showDiagrams(page);
+
+    await expect(page.locator('#summary .chip.conflict')).toBeHidden();
+    await expect(page.locator('#summary .chip.added b')).toHaveText('5');
   });
 });

@@ -15,6 +15,8 @@ import { createNavigation } from './navigation.js';
 import {
   activePanes, canvasOf, collectFlowElements, createPane, elementOf, importInto, resizeAll, showMessage, viewOf
 } from './panes.js';
+import { orderEntries } from './merge-changes.js';
+import { decorateMerge, detailsOf } from './merge-decorations.js';
 import { createMergeView } from './merge-view.js';
 import { createFullRepaint } from './repaint.js';
 import { createSync } from './sync.js';
@@ -99,16 +101,49 @@ const mergeView = createMergeView({
   zoom,
   Viewer: NavigatedViewer,
   parse: (xml) => new BpmnModdle().fromXML(xml),
-  onRendered: () => {}
+  onRendered: (merge) => {
+    currentMerge = { ...merge, entries: orderEntries(merge.entries, merge.states) };
+    navigation.retainSelection(currentMerge.entries);
+    changeList.renderMergeSummary(currentMerge.entries, currentMerge.states);
+    redrawChanges();
+    zoom.updateControls();
+  }
 });
+
+/** The merge shown in merge mode: entries in change-list order, result states, changes base → result. */
+let currentMerge = null;
+
+function inMerge() {
+  return document.body.dataset.mode === 'merge' && currentMerge;
+}
+
+/** In merge mode, whether the filter shows an entry: both-sided ones by the conflict chip, the others by kind. */
+function isMergeEntryVisible(entry) {
+  return entry.side === 'both' ? filter.kinds.has('conflict') : filter.kinds.has(entry.kind);
+}
 
 /** Changes the user can actually see, in change-list order, so navigation and the chips agree. */
 function visibleChanges() {
+  if (inMerge()) {
+    return currentMerge.entries.filter(isMergeEntryVisible);
+  }
+
   return currentChanges.filter((change) => visibleKind(change, filter.kinds));
 }
 
 /** Everything that depends on which kinds the filter shows. */
 function redrawChanges() {
+  if (inMerge()) {
+    const { entries, states, resultChanges } = currentMerge;
+    const hasResult = states.size > 0;
+
+    decorateMerge(panes, entries, states, resultChanges, isMergeEntryVisible);
+    changeList.renderMerge(entries, states, isMergeEntryVisible, navigation.selectedId,
+      (entry) => detailsOf(entry, resultChanges.find((c) => c.id === entry.id), hasResult));
+    navigation.updateButtons();
+    return;
+  }
+
   decorate(panes, currentChanges, filter.kinds);
   changeList.render(currentChanges, filter.kinds, navigation.selectedId);
   navigation.updateButtons();

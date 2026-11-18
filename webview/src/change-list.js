@@ -1,6 +1,8 @@
 import { KINDS } from './changes.js';
 import { visibleKind } from './decorations.js';
 import { KIND_LABEL, describeAttrs, displayName, typeName } from './format.js';
+import { isOpen } from './merge-changes.js';
+import { STATE_LABEL } from './merge-decorations.js';
 import { setTip } from './tooltips.js';
 
 /**
@@ -84,6 +86,101 @@ export function createChangeList({ onPick, onToggle }) {
     markSelected(selectedId);
   }
 
+  /**
+   * The counts of a merge: the kind chips count what one side changed, the conflict chip the elements
+   * both sides changed - how many of them the result has not taken a side on yet, of how many.
+   */
+  function renderMergeSummary(entries, states) {
+    const counts = { added: 0, removed: 0, changed: 0, layout: 0 };
+    let both = 0;
+    let open = 0;
+
+    for (const entry of entries) {
+      if (entry.side === 'both') {
+        both++;
+        open += isOpen(entry, states) ? 1 : 0;
+      } else {
+        counts[entry.kind]++;
+      }
+    }
+
+    for (const kind of KINDS) {
+      document.querySelector('.chip.' + kind + ' b').textContent = counts[kind];
+    }
+
+    document.querySelector('.chip.conflict b').textContent = open + ' / ' + both;
+    document.getElementById('summary-note').textContent = entries.length ? '' : 'No differences';
+  }
+
+  /**
+   * The change list of a merge, in `entries` order: kind, name, which side changed it and, for an element
+   * both sides changed, whether the result has taken a side.
+   *
+   * @param {(entry) => string} details the attribute lines of an entry
+   */
+  function renderMerge(entries, states, isVisible, selectedId, details) {
+    list.textContent = '';
+
+    const shown = entries.filter(isVisible);
+
+    if (!shown.length) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = entries.length ? 'All changes are hidden by the filter.' : 'No changes.';
+      list.appendChild(li);
+      return;
+    }
+
+    for (const entry of shown) {
+      const li = document.createElement('li');
+      li.className = 'merge';
+
+      const kinds = new Set([ ...(entry.ours ? entry.ours.kinds : []), ...(entry.theirs ? entry.theirs.kinds : []) ]);
+      const kind = document.createElement('span');
+      kind.className = 'kind ' + entry.kind + (entry.conflict ? ' conflict' : '');
+      kind.textContent = entry.side === 'both'
+        ? (entry.conflict ? 'Conflict' : 'Both changed')
+        : KINDS.filter((k) => kinds.has(k)).map((k) => KIND_LABEL[k]).join(' + ');
+
+      const name = document.createElement('span');
+      name.textContent = displayName(entry);
+      setTip(name, entry.id);
+
+      const side = document.createElement('span');
+      side.className = 'side ' + entry.side;
+      side.textContent = entry.side;
+
+      const state = document.createElement('span');
+      state.className = 'state';
+
+      if (entry.side === 'both') {
+        state.textContent = isOpen(entry, states) ? 'open' : STATE_LABEL[states.get(entry.id)];
+        state.classList.toggle('open', isOpen(entry, states));
+      }
+
+      const type = document.createElement('span');
+      type.className = 'type';
+      type.textContent = typeName(entry);
+
+      li.append(kind, name, side, state, type);
+
+      const text = details(entry);
+
+      if (text) {
+        const attrs = document.createElement('span');
+        attrs.className = 'attrs';
+        attrs.textContent = text;
+        li.append(document.createElement('span'), attrs);
+      }
+
+      li.dataset.changeId = entry.id;
+      li.addEventListener('click', () => onPick(entry.id));
+      list.appendChild(li);
+    }
+
+    markSelected(selectedId);
+  }
+
   /** Shows in the change list which change stepping is on, so F7 is not a blind jump. */
   function markSelected(id) {
     for (const li of list.querySelectorAll('li[data-change-id]')) {
@@ -112,5 +209,5 @@ export function createChangeList({ onPick, onToggle }) {
   toggle.addEventListener('click', () => setVisible(isHidden()));
   updateTooltip();
 
-  return { renderSummary, render, markSelected, isHidden, setVisible };
+  return { renderSummary, render, renderMergeSummary, renderMerge, markSelected, isHidden, setVisible };
 }
