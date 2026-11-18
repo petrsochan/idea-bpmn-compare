@@ -78,7 +78,14 @@ const navigation = createNavigation({
   panes,
   sync,
   visibleChanges,
-  onSelect: (id) => changeList.markSelected(id),
+  onSelect: (id) => {
+    changeList.markSelected(id);
+
+    // in the merge window the text merge's result column follows the element stepped to
+    if (inMerge() && id) {
+      revealInResult(id);
+    }
+  },
   repaint: repaintFully
 });
 const exportMenu = createExportMenu({
@@ -101,6 +108,7 @@ const mergeView = createMergeView({
   zoom,
   Viewer: NavigatedViewer,
   parse: (xml) => new BpmnModdle().fromXML(xml),
+  onElementClick: (id) => revealInResult(id),
   onRendered: (merge) => {
     // the order is set when a merge is shown and kept while the user resolves it: rows that jumped
     // as their conflict got resolved would make F7 skip the open conflicts after the current one
@@ -121,6 +129,11 @@ function inOrderOf(ordered, entries) {
   const byId = new Map(entries.map((entry) => [ entry.id, entry ]));
 
   return ordered.map((entry) => byId.get(entry.id)).filter(Boolean);
+}
+
+/** Asks the IDE to put the caret of the merge window's result column on element `id`. */
+function revealInResult(id) {
+  sendToHost({ command: 'revealInResult', id });
 }
 
 /** The merge shown in merge mode: entries in change-list order, result states, changes base → result. */

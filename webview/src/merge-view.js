@@ -26,8 +26,9 @@ const INVALID_RESULT = 'The result is not valid BPMN right now – showing the l
  * @param {(xml: string) => Promise} options.parse rejects for XML that is not BPMN
  * @param {(merge: { entries, states, resultChanges, fresh, note }) => void} options.onRendered after every render;
  *   `fresh` for a new merge, `note` says why the changes are incomplete ('' when they are not)
+ * @param {(id: string) => void} options.onElementClick an element (or its label) was clicked in a merge pane
  */
-export function createMergeView({ panes, sync, zoom, Viewer, parse, onRendered }) {
+export function createMergeView({ panes, sync, zoom, Viewer, parse, onRendered, onElementClick }) {
   let middle = 'result';
 
   /** Definitions and elements of ours, base and theirs, and the entries computed from them. */
@@ -49,6 +50,15 @@ export function createMergeView({ panes, sync, zoom, Viewer, parse, onRendered }
       panes[side] = pane;
       sync.attach(pane);
       zoom.attach(pane);
+
+      // a click on the empty canvas is a click on the root element - that selects nothing
+      pane.viewer.get('eventBus').on('element.click', (event) => {
+        const element = event.element;
+
+        if (element.parent && element.businessObject) {
+          onElementClick(element.businessObject.id);
+        }
+      });
     }
 
     for (const button of document.querySelectorAll('[data-middle]')) {

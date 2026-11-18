@@ -9,6 +9,10 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.ToggleAction;
+import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.EditorFactory;
+import com.intellij.openapi.editor.ScrollType;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.ui.OnePixelSplitter;
@@ -29,6 +33,7 @@ final class BpmnMergeViewer implements MergeTool.MergeViewer {
     private static final float DEFAULT_DIAGRAMS_PROPORTION = 0.4f;
 
     private final MergeTool.MergeViewer text;
+    private final Document result;
     private final BpmnMergePanel diagrams;
     private final OnePixelSplitter splitter = new OnePixelSplitter(true, SPLITTER_KEY, DEFAULT_DIAGRAMS_PROPORTION);
 
@@ -39,7 +44,8 @@ final class BpmnMergeViewer implements MergeTool.MergeViewer {
                 .map(DocumentContent::getDocument)
                 .map(document -> document.getText())
                 .toList();
-        this.diagrams = new BpmnMergePanel(sideTexts, request.getContentTitles(), request.getOutputContent().getDocument());
+        this.result = request.getOutputContent().getDocument();
+        this.diagrams = new BpmnMergePanel(sideTexts, request.getContentTitles(), result, this::revealInResult);
         splitter.setSecondComponent(text.getComponent());
     }
 
@@ -69,6 +75,29 @@ final class BpmnMergeViewer implements MergeTool.MergeViewer {
     @Override
     public @Nullable Action getResolveAction(@NotNull MergeResult result) {
         return text.getResolveAction(result);
+    }
+
+    /**
+     * Puts the caret of the result column on the element {@code id} and scrolls it into the middle. The result
+     * column is the editor of the result document inside this window's text merge; an element the result does
+     * not have (yet) moves nothing.
+     */
+    private void revealInResult(String id) {
+        int offset = BpmnXmlLocator.offsetOfElement(result.getText(), id);
+        if (offset < 0) {
+            return;
+        }
+        for (Editor editor : EditorFactory.getInstance().getEditors(result)) {
+            if (SwingUtilities.isDescendingFrom(editor.getComponent(), text.getComponent())) {
+                // the focus stays in the diagrams, where F7 keeps stepping; a caret alone is not drawn in an
+                // editor without focus, the selected line is
+                int line = result.getLineNumber(offset);
+                editor.getCaretModel().moveToOffset(offset);
+                editor.getSelectionModel().setSelection(result.getLineStartOffset(line), result.getLineEndOffset(line));
+                editor.getScrollingModel().scrollToCaret(ScrollType.CENTER);
+                return;
+            }
+        }
     }
 
     private boolean diagramsShown() {

@@ -17,6 +17,7 @@ import java.awt.*;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * The diagrams of a merge: ours, the result as it is being resolved, and theirs, with the base behind a
@@ -33,7 +34,8 @@ final class BpmnMergePanel extends JPanel implements Disposable {
     private final List<String> sideTexts;
     private final List<String> titles;
     private final Document result;
-    private final BpmnWebView webView = new BpmnWebView(this, this::pushAll, message -> { });
+    private final BpmnWebView webView = new BpmnWebView(this, this::pushAll, this::handleHostRequest);
+    private final Consumer<String> revealInResult;
     private final Alarm resultAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
     private final JBCheckBox syncBox = new JBCheckBox("Synchronize mouse & view", BpmnCompareSettings.isSyncEnabled());
 
@@ -44,12 +46,14 @@ final class BpmnMergePanel extends JPanel implements Disposable {
      * @param sideTexts the texts of ours, base and theirs, in this order
      * @param titles    their titles, as the merge window shows them
      * @param result    the merge window's result document
+     * @param revealInResult puts the result column's caret on the element with the given id
      */
-    BpmnMergePanel(List<String> sideTexts, List<String> titles, Document result) {
+    BpmnMergePanel(List<String> sideTexts, List<String> titles, Document result, Consumer<String> revealInResult) {
         super(new BorderLayout());
         this.sideTexts = sideTexts;
         this.titles = titles;
         this.result = result;
+        this.revealInResult = revealInResult;
         Disposer.register(this, webView);
         add(createToolbar(), BorderLayout.NORTH);
     }
@@ -95,6 +99,14 @@ final class BpmnMergePanel extends JPanel implements Disposable {
             pushResult();
         } else {
             resultAlarm.cancelAllRequests();
+        }
+    }
+
+    /** A message from the page; called on the browser thread. */
+    private void handleHostRequest(Map<String, Object> message) {
+        if ("revealInResult".equals(message.get("command"))) {
+            String id = String.valueOf(message.get("id"));
+            webView.onEdt(() -> revealInResult.accept(id));
         }
     }
 

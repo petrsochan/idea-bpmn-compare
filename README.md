@@ -42,8 +42,8 @@ Visual comparison of BPMN diagrams with any Git revision, powered by [bpmn.io](h
   diagrams of ours, the result and theirs (the base behind a switch in the middle). Each side's changes against
   the base are highlighted; elements both sides changed are outlined in every diagram – loudly while the
   conflict is open – and listed first, with a *Conflicts* chip counting the open ones. The result diagram follows
-  every Accept, Apply and edit and shows which side each change was taken from. Resolving stays in the text
-  merge; *Show BPMN Diagrams* in its toolbar hides the diagrams (remembered).
+  every Accept, Apply and edit and shows which side each change was taken from. F7, a click on an element or on
+  a change-list row puts the result column's caret on that element. Resolving stays in the text merge; *Show BPMN Diagrams* in its toolbar hides the diagrams (remembered).
 - **Diagram ↔ XML** – double-click an element to open the XML editor on it; **Follow caret** (off by default)
   does the reverse and selects the element the caret is in.
 - **Export** – the change list as Markdown into the clipboard, or the left diagram as SVG/PNG with the markers.

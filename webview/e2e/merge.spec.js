@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import {
   CURRENT, REVISION, badge, breadcrumbs, changeListIds, element, openFixtures, openMerge, rendered, selectedChange,
-  setResult, showDiagrams, showMerge, viewbox
+  sentToHost, setResult, showDiagrams, showMerge, viewbox
 } from './view.js';
 
 /** Both panes show the same region, as expectSameRegion checks for left/right. */
@@ -326,5 +326,65 @@ test.describe('merge view: highlights and the change list', () => {
 
     await expect(page.locator('#summary .chip.conflict')).toBeHidden();
     await expect(page.locator('#summary .chip.added b')).toHaveText('5');
+  });
+});
+
+test.describe('merge view: the text merge follows', () => {
+
+  /** The ids the page asked the IDE to show in the result column, in order. */
+  async function revealed(page) {
+    return (await sentToHost(page, 'revealInResult')).map((message) => message.id);
+  }
+
+  test('F7 shows the element in the result column', async ({ page }) => {
+    await openMerge(page);
+    await page.locator('#pane-ours header').click();
+
+    await page.keyboard.press('F7');
+
+    expect(await revealed(page)).toEqual([ 'Task_Review' ]);
+  });
+
+  test('a change list row shows its element in the result column', async ({ page }) => {
+    await openMerge(page);
+    await page.locator('#toggle-changes').click();
+
+    await page.locator('#change-list li[data-change-id="Task_Ship"]').click();
+
+    expect(await revealed(page)).toEqual([ 'Task_Ship' ]);
+  });
+
+  test('a click on an element shows it in the result column', async ({ page }) => {
+    await openMerge(page);
+
+    await element(page, 'theirs', 'Task_Gift').click();
+
+    expect(await revealed(page)).toEqual([ 'Task_Gift' ]);
+  });
+
+  test('a click on an element label shows its element', async ({ page }) => {
+    await openMerge(page);
+
+    await page.locator('#pane-ours .djs-element[data-element-id="F_Yes_label"]').click();
+
+    expect(await revealed(page)).toEqual([ 'F_Yes' ]);
+  });
+
+  test('a click on the empty canvas shows nothing', async ({ page }) => {
+    await openMerge(page);
+
+    await page.locator('#pane-ours .canvas').click({ position: { x: 5, y: 5 } });
+
+    expect(await revealed(page)).toEqual([]);
+  });
+
+  test('the diff view does not ask for the result column', async ({ page }) => {
+    await openFixtures(page);
+    await page.locator('#pane-left header').click();
+
+    await page.keyboard.press('F7');
+    await element(page, 'left', 'Task_Ship').click();
+
+    expect(await revealed(page)).toEqual([]);
   });
 });
