@@ -7,10 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - **Element history** – right-click an element and pick *History of "…"* to see the commits that changed it: author, date, commit message and what happened to the element, such as a rename or a move. A click opens that commit's diff in the BPMN view, centred on the element. A commit is listed exactly when its diff shows the element changed – the same comparison as the view, Camunda and Zeebe extensions and the tolerance for tiny shifts included – and renames of the file are followed.
+- **Merge conflicts in diagrams** – the IDE's merge window of a `.bpmn` file shows the diagrams of ours, the result and theirs above the unchanged text merge, with the base behind a switch in the middle. Each side's changes against the base are highlighted, and elements both sides changed are outlined in every diagram – loudly while the conflict is open. They come first in the change list and in F7 order, and a *Conflicts* chip counts how many are still open. The result diagram follows every Accept, Apply and edit and shows which side each change was taken from; a result that is not valid BPMN for a moment keeps the last valid diagram. F7, a click on an element or on a change-list row puts the caret of the result column on that element. Resolving stays in the text merge; *Show BPMN Diagrams* in its toolbar hides the diagrams, and the choice is remembered. The diagrams help with merging smaller changes – a few renamed, moved or added elements; they make no claim to untangle complex merges, where the text merge remains the tool.
+- **Conflict in the BPMN Diff tab** – while a `.bpmn` file is in conflict outside the merge window, for example after a merge or rebase on the command line, the tab switches by itself to ours, base and theirs from the Git index, with the same highlights. *Resolve…* opens the merge window, and once the conflict is gone the tab compares with the chosen revision again.
 
 ### Changed
 - Panning or zooming a large diagram, or moving the mouse while the diagrams are synchronized, no longer leaves pieces of earlier frames on screen – white blocks over the diagram, a strip of it repeated below, ghost cursors that stayed where the mouse had been. The IDE's embedded browser copied only the last of several quickly drawn frames, so the page now repaints the whole view while something moves.
 - Tiny layout shifts are no longer reported as moves. A shape, label or bend point that shifted by at most 5 px – typically a modeller rounding coordinates or re-placing labels when it saves – is left out of the *Moved* count, the markers and the change list. A changed number of bend points and an expanded or collapsed subprocess are still reported.
+
+### Fixed
+- The *BPMN diagram* view of a diff shown in a modal dialog no longer stays empty until the dialog is closed.
 
 ## [1.2.0]
 
