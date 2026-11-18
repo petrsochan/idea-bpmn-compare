@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_Order" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_Order" name="Order fulfilment" isExecutable="true">
+    <bpmn:startEvent id="Start" name="New order" />
+    <bpmn:task id="Task_Receive" name="Register order" />
+    <bpmn:task id="Task_Check" name="Check warehouse stock" />
+    <bpmn:exclusiveGateway id="Gateway_Stock" name="In stock?" />
+    <bpmn:subProcess id="Sub_Payment" name="Process payment">
+      <bpmn:startEvent id="Pay_Start" />
+      <bpmn:task id="Task_Charge" name="Charge card" />
+      <bpmn:sequenceFlow id="Pay_F2" sourceRef="Task_Charge" targetRef="Pay_End" />
+      <bpmn:endEvent id="Pay_End" />
+      <bpmn:sequenceFlow id="Pay_F1" sourceRef="Pay_Start" targetRef="Task_Charge" />
+    </bpmn:subProcess>
+    <bpmn:task id="Task_Ship" name="Ship parcel" />
+    <bpmn:endEvent id="End_Shipped" name="Shipped" />
+    <bpmn:endEvent id="End_Hold" name="Held" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="Task_Receive" />
+    <bpmn:sequenceFlow id="F2" sourceRef="Task_Receive" targetRef="Task_Check" />
+    <bpmn:sequenceFlow id="F3" sourceRef="Task_Check" targetRef="Gateway_Stock" />
+    <bpmn:sequenceFlow id="F_Yes" name="yes" sourceRef="Gateway_Stock" targetRef="Sub_Payment" />
+    <bpmn:sequenceFlow id="F5" sourceRef="Sub_Payment" targetRef="Task_Ship" />
+    <bpmn:sequenceFlow id="F6" sourceRef="Task_Ship" targetRef="End_Shipped" />
+    <bpmn:task id="Task_Gift" name="Add gift" />
+    <bpmn:task id="Task_Review" name="Manual check" />
+    <bpmn:sequenceFlow id="F_No" name="no" sourceRef="Gateway_Stock" targetRef="Task_Review" />
+    <bpmn:sequenceFlow id="F_Review" sourceRef="Task_Review" targetRef="End_Hold" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_Order">
+    <bpmndi:BPMNPlane id="Plane_Order" bpmnElement="Process_Order">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="152" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Receive_di" bpmnElement="Task_Receive"><dc:Bounds x="240" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Check_di" bpmnElement="Task_Check"><dc:Bounds x="390" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Stock_di" bpmnElement="Gateway_Stock" isMarkerVisible="true"><dc:Bounds x="545" y="175" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Payment_di" bpmnElement="Sub_Payment" isExpanded="false"><dc:Bounds x="650" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Ship_di" bpmnElement="Task_Ship"><dc:Bounds x="810" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Shipped_di" bpmnElement="End_Shipped"><dc:Bounds x="972" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Hold_di" bpmnElement="End_Hold"><dc:Bounds x="812" y="322" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="F1_di" bpmnElement="F1"><di:waypoint x="188" y="200" /><di:waypoint x="240" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F2_di" bpmnElement="F2"><di:waypoint x="340" y="200" /><di:waypoint x="390" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F3_di" bpmnElement="F3"><di:waypoint x="490" y="200" /><di:waypoint x="545" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Yes_di" bpmnElement="F_Yes"><di:waypoint x="595" y="200" /><di:waypoint x="650" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F5_di" bpmnElement="F5"><di:waypoint x="750" y="200" /><di:waypoint x="810" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F6_di" bpmnElement="F6"><di:waypoint x="910" y="200" /><di:waypoint x="972" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Task_Gift_di" bpmnElement="Task_Gift"><dc:Bounds x="650" y="420" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Review_di" bpmnElement="Task_Review"><dc:Bounds x="650" y="300" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="F_No_di" bpmnElement="F_No"><di:waypoint x="570" y="225" /><di:waypoint x="570" y="340" /><di:waypoint x="650" y="340" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Review_di" bpmnElement="F_Review"><di:waypoint x="750" y="340" /><di:waypoint x="812" y="340" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+  <bpmndi:BPMNDiagram id="Diagram_Payment">
+    <bpmndi:BPMNPlane id="Plane_Payment" bpmnElement="Sub_Payment">
+      <bpmndi:BPMNShape id="Pay_Start_di" bpmnElement="Pay_Start"><dc:Bounds x="180" y="100" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Charge_di" bpmnElement="Task_Charge"><dc:Bounds x="270" y="78" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Pay_F1_di" bpmnElement="Pay_F1"><di:waypoint x="216" y="118" /><di:waypoint x="270" y="118" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Pay_End_di" bpmnElement="Pay_End"><dc:Bounds x="422" y="100" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Pay_F2_di" bpmnElement="Pay_F2"><di:waypoint x="370" y="118" /><di:waypoint x="422" y="118" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
