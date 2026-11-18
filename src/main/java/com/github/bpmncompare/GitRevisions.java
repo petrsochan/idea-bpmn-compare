@@ -257,7 +257,7 @@ final class GitRevisions {
     record RevisionContent(String xml, @Nullable String earlierPath) {
     }
 
-    private static String stripBom(String text) {
+    static String stripBom(String text) {
         return !text.isEmpty() && text.charAt(0) == '﻿' ? text.substring(1) : text;
     }
 

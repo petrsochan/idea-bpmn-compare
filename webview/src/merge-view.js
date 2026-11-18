@@ -26,9 +26,13 @@ const INVALID_RESULT = 'The result is not valid BPMN right now – showing the l
  * @param {(merge: { entries, states, resultChanges, fresh, note }) => void} options.onRendered after every render;
  *   `fresh` for a new merge, `note` says why the changes are incomplete ('' when they are not)
  * @param {(id: string) => void} options.onElementClick an element (or its label) was clicked in a merge pane
+ * @param {(id: string) => void} options.onElementDblClick an element (or its label) was double-clicked
  */
-export function createMergeView({ panes, sync, zoom, Viewer, onRendered, onElementClick }) {
+export function createMergeView({ panes, sync, zoom, Viewer, onRendered, onElementClick, onElementDblClick }) {
   let middle = 'result';
+
+  /** What the user picked in the middle; a merge without a result shows the base regardless. */
+  let preferredMiddle = 'result';
 
   /** Definitions and elements of ours, base and theirs, and the entries computed from them. */
   let fixed = null;
@@ -58,10 +62,21 @@ export function createMergeView({ panes, sync, zoom, Viewer, onRendered, onEleme
           onElementClick(element.businessObject.id);
         }
       });
+
+      pane.viewer.get('eventBus').on('element.dblclick', (event) => {
+        const element = event.element;
+
+        if (element.parent && element.businessObject) {
+          onElementDblClick(element.businessObject.id);
+        }
+      });
     }
 
     for (const button of document.querySelectorAll('[data-middle]')) {
-      button.addEventListener('click', () => setMiddle(button.dataset.middle));
+      button.addEventListener('click', () => {
+        preferredMiddle = button.dataset.middle;
+        setMiddle(button.dataset.middle);
+      });
     }
   }
 
@@ -119,7 +134,11 @@ export function createMergeView({ panes, sync, zoom, Viewer, onRendered, onEleme
   async function setMerge(payload) {
     ensurePanes();
     setMode('merge');
-    setMiddle(middle);
+
+    // a conflict that nobody has resolved yet (the BPMN Diff tab) has no result: the base is the middle
+    const withResult = !!(payload.result && (payload.result.xml || payload.result.error || payload.result.message));
+    document.body.dataset.mergeResult = String(withResult);
+    setMiddle(withResult ? preferredMiddle : 'base');
 
     const [ ours, base, theirs ] = await Promise.all([
       importInto(panes.ours, payload.ours || {}),

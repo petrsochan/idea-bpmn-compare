@@ -426,3 +426,42 @@ test.describe('merge view: the text merge follows', () => {
     expect(await revealed(page)).toEqual([]);
   });
 });
+
+test.describe('merge view: a conflict without a result (the BPMN Diff tab)', () => {
+
+  test('shows the base in the middle without the switch', async ({ page }) => {
+    await openMerge(page, { result: null });
+
+    await expect(page.locator('#pane-base')).toBeVisible();
+    await expect(page.locator('#pane-result')).toBeHidden();
+    await expect(page.locator('#pane-base .middle-switch')).toBeHidden();
+    await expect(page.locator('#summary .chip.conflict')).toHaveText(/Conflicts\s*3 \/ 3 open/);
+  });
+
+  test('F7 walks the open conflicts', async ({ page }) => {
+    await openMerge(page, { result: null });
+    await page.locator('#pane-ours header').click();
+
+    await page.keyboard.press('F7');
+
+    expect(await selectedChange(page)).toEqual([ 'Task_Review' ]);
+  });
+
+  test('a merge with a result brings the switch back', async ({ page }) => {
+    await openMerge(page, { result: null });
+
+    await showMerge(page);
+
+    await expect(page.locator('#pane-result')).toBeVisible();
+    await expect(page.locator('#pane-base')).toBeHidden();
+    await expect(page.locator('#pane-result .middle-switch')).toBeVisible();
+  });
+
+  test('a double-click on an element opens it in the XML', async ({ page }) => {
+    await openMerge(page, { result: null });
+
+    await element(page, 'theirs', 'Task_Gift').dblclick();
+
+    expect((await sentToHost(page, 'openXml')).map((m) => m.id)).toEqual([ 'Task_Gift' ]);
+  });
+});

@@ -27,6 +27,10 @@ import com.intellij.dvcs.repo.VcsRepositoryManager;
 import com.intellij.dvcs.repo.VcsRepositoryMappingListener;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.vcs.AbstractVcsHelper;
+import com.intellij.openapi.vcs.FileStatus;
+import com.intellij.openapi.vcs.FileStatusListener;
+import com.intellij.openapi.vcs.FileStatusManager;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VfsUtilCore;
@@ -81,6 +85,13 @@ final class BpmnComparePanel extends JPanel implements Disposable {
     private @Nullable VirtualFile rightFile;
 
     private final JButton revisionButton = new JButton();
+    private final JBLabel compareWith = new JBLabel("Compare with:");
+    private final JButton resolveButton = new JButton("Resolve…");
+    /** The file is in conflict and the tab shows its stages instead of the comparison. */
+    private boolean inConflict;
+    private @Nullable ConflictStages.Sides conflictSides;
+    /** Only the newest loading of the stages counts. */
+    private int conflictRequest;
     private final JBCheckBox syncBox = new JBCheckBox("Synchronize mouse & view", BpmnCompareSettings.isSyncEnabled());
     private final Alarm documentAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
     /** Separate from {@link #documentAlarm} so an edit and a repository change cannot cancel each other. */
@@ -154,6 +165,10 @@ final class BpmnComparePanel extends JPanel implements Disposable {
             document.addDocumentListener(new DocumentListener() {
                 @Override
                 public void documentChanged(@NotNull DocumentEvent event) {
+                    // a file in conflict holds markers, which do not render; the tab shows the conflict instead
+                    if (inConflict) {
+                        return;
+                    }
                     documentAlarm.cancelAllRequests();
                     documentAlarm.addRequest(() -> reloadSide(Side.LEFT, leftSource, true), DOCUMENT_UPDATE_DELAY_MS);
                 }
@@ -168,7 +183,97 @@ final class BpmnComparePanel extends JPanel implements Disposable {
                 (VcsRepositoryMappingListener) () -> ApplicationManager.getApplication()
                         .invokeLater(this::pushHistoryAvailability, webView.modality(), o -> disposed));
 
-        reloadBothSides();
+        if (conflictAware()) {
+            FileStatusManager.getInstance(project).addFileStatusListener(new FileStatusListener() {
+                @Override
+                public void fileStatusesChanged() {
+                    onEdt(BpmnComparePanel.this::checkConflict);
+                }
+
+                @Override
+                public void fileStatusChanged(@NotNull VirtualFile changed) {
+                    if (changed.equals(file)) {
+                        onEdt(BpmnComparePanel.this::checkConflict);
+                    }
+                }
+            }, this);
+        }
+
+        if (conflictAware() && isConflicted()) {
+            enterConflict();
+        } else {
+            reloadBothSides();
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------------------------
+    // conflict mode: while the file is in conflict, the tab shows ours | base | theirs from the Git index
+    // ------------------------------------------------------------------------------------------------------------
+
+    /** Only the editor tab of a file follows its conflict; a diff window shows what it was asked to. */
+    private boolean conflictAware() {
+        return file != null && leftSource instanceof BpmnContentSource.Working && rightSource.revision() != null;
+    }
+
+    private boolean isConflicted() {
+        return FileStatusManager.getInstance(project).getStatus(file) == FileStatus.MERGED_WITH_CONFLICTS;
+    }
+
+    /** Switches between the conflict and the comparison when - and only when - the conflict state changed. */
+    private void checkConflict() {
+        boolean conflicted = isConflicted();
+        if (conflicted == inConflict) {
+            return;
+        }
+        if (conflicted) {
+            enterConflict();
+        } else {
+            inConflict = false;
+            conflictSides = null;
+            updateToolbarForConflict();
+            reloadBothSides();
+        }
+    }
+
+    private void enterConflict() {
+        inConflict = true;
+        updateToolbarForConflict();
+        int request = ++conflictRequest;
+        pushStatus("left", "Loading the conflict…");
+
+        new Task.Backgroundable(project, "Loading the conflict of " + file.getName(), false) {
+            private ConflictStages.Sides sides;
+
+            @Override
+            public void run(@NotNull ProgressIndicator indicator) {
+                GitRepository repository = GitRevisions.repositoryFor(project, file);
+                String notUnderGit = "The file is not under Git version control.";
+                sides = repository != null
+                        ? ConflictStages.load(project, repository, file)
+                        : new ConflictStages.Sides(DiagramSide.error("Ours", notUnderGit),
+                                DiagramSide.error("Base", notUnderGit), DiagramSide.error("Theirs", notUnderGit));
+            }
+
+            @Override
+            public void onSuccess() {
+                if (request != conflictRequest || !inConflict || disposed) {
+                    return;
+                }
+                conflictSides = sides;
+                pushDiagrams(false);
+            }
+        }.queue();
+    }
+
+    private void updateToolbarForConflict() {
+        compareWith.setVisible(!inConflict && rightSource.revision() != null);
+        revisionButton.setVisible(!inConflict && rightSource.revision() != null);
+        resolveButton.setVisible(inConflict);
+    }
+
+    /** The IDE's merge window for the file - with the diagrams above the text merge. */
+    private void resolveConflict() {
+        AbstractVcsHelper.getInstance(project).showMergeDialogWithResult(List.of(file));
     }
 
     /**
@@ -208,6 +313,8 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         String payload = String.valueOf(message.get("payload"));
         switch (command) {
             case "openXml" -> onEdt(() -> openXml(String.valueOf(message.get("id"))));
+            // the merge view asks for the merge window's result column, which the tab does not have
+            case "revealInResult" -> { }
             case "elementHistory" -> onEdt(() -> showElementHistory(message));
             case "historyChunk" -> {
                 // not via the EDT: the history's background task is waiting for exactly this
@@ -376,8 +483,15 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         // only a revision-backed right side can be pointed somewhere else; in a diff window both
         // sides are fixed by the request, so the chooser would have nothing to offer
         RevisionItem revision = rightSource.revision();
+        if (conflictAware()) {
+            resolveButton.setIcon(AllIcons.Vcs.Merge);
+            resolveButton.setToolTipText("Open the merge window, with the diagrams above the text merge");
+            resolveButton.addActionListener(e -> resolveConflict());
+            resolveButton.setVisible(false);
+            controls.add(resolveButton);
+        }
         if (revision != null) {
-            controls.add(new JBLabel("Compare with:"));
+            controls.add(compareWith);
             revisionButton.setText(revision.shortLabel() + "  ▾");
             revisionButton.setIcon(AllIcons.Vcs.Branch);
             revisionButton.setToolTipText("Choose a branch, tag or commit to compare with");
@@ -571,7 +685,10 @@ final class BpmnComparePanel extends JPanel implements Disposable {
         } else {
             rightSide = result;
         }
-        pushDiagrams(preserveView);
+        // kept for when the conflict is over; until then the tab shows the conflict
+        if (!inConflict) {
+            pushDiagrams(preserveView);
+        }
     }
 
     // ------------------------------------------------------------------------------------------------------------
@@ -587,6 +704,17 @@ final class BpmnComparePanel extends JPanel implements Disposable {
 
     private void pushDiagrams(boolean preserveView) {
         if (!webView.isReady()) {
+            return;
+        }
+        if (inConflict) {
+            if (conflictSides != null) {
+                Map<String, Object> merge = new LinkedHashMap<>();
+                merge.put("ours", conflictSides.ours().toJson());
+                merge.put("base", conflictSides.base().toJson());
+                merge.put("theirs", conflictSides.theirs().toJson());
+                merge.put("result", null);
+                call("setMerge", merge);
+            }
             return;
         }
         Map<String, Object> payload = new LinkedHashMap<>();

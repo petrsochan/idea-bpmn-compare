@@ -181,6 +181,8 @@ body:not([data-mode="merge"]) .chip.conflict { display: none; }
 .pane header .notice:empty { display: none; }
 
 .middle-switch { display: inline-flex; flex: none; }
+/* a merge without a result (a conflict shown in the BPMN Diff tab) has only the base for the middle */
+body[data-merge-result="false"] .middle-switch { display: none; }
 .middle-switch button {
   font: inherit;
   padding: 0 8px;

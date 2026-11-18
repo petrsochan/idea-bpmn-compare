@@ -107,6 +107,7 @@ const mergeView = createMergeView({
   zoom,
   Viewer: NavigatedViewer,
   onElementClick: (id) => revealInResult(id),
+  onElementDblClick: (id) => sendToHost({ command: 'openXml', id }),
   onRendered: (merge) => {
     // the order is set when a merge is shown and kept while the user resolves it: rows that jumped
     // as their conflict got resolved would make F7 skip the open conflicts after the current one
