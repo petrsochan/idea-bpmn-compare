@@ -38,6 +38,12 @@ Visual comparison of BPMN diagrams with any Git revision, powered by [bpmn.io](h
   first parent by the same differ as the view – layout tolerance and Camunda/Zeebe extensions included – so a commit
   is listed exactly when its diff shows the element changed. The history follows renames of the file and reads the
   same 300 commits as the revision chooser.
+- **Merge conflicts** – the IDE's merge window of a `.bpmn` file shows, above the unchanged text merge, the
+  diagrams of ours, the result and theirs (the base behind a switch in the middle). Each side's changes against
+  the base are highlighted; elements both sides changed are outlined in every diagram – loudly while the
+  conflict is open – and listed first, with a *Conflicts* chip counting the open ones. The result diagram follows
+  every Accept, Apply and edit and shows which side each change was taken from. Resolving stays in the text
+  merge; *Show BPMN Diagrams* in its toolbar hides the diagrams (remembered).
 - **Diagram ↔ XML** – double-click an element to open the XML editor on it; **Follow caret** (off by default)
   does the reverse and selects the element the caret is in.
 - **Export** – the change list as Markdown into the clipboard, or the left diagram as SVG/PNG with the markers.

@@ -25,6 +25,8 @@
       <li><b>Navigation</b> – F7 / Shift+F7 step through the changes; double-click an element to open it in the XML,
           and <i>Follow caret</i> selects the element you are editing.</li>
       <li><b>Export</b> – the change list as Markdown for a pull request, or the diagram with its markers as SVG or PNG.</li>
+      <li><b>Merge conflicts</b> – ours, the result as it is being resolved, and theirs as diagrams above the IDE's
+          text merge, with the elements both sides changed marked and the open conflicts counted.</li>
       <li><b>Synchronized</b> cursor, hover, pan and zoom between both diagrams.</li>
     </ul>
     Open a <code>.bpmn</code> file and switch to the <b>BPMN Diff</b> tab, or use
@@ -52,6 +54,8 @@
         <fileEditorProvider implementation="com.github.bpmncompare.BpmnCompareEditorProvider"/>
         <!-- the BPMN view as an alternative in every IDE diff window; the text diff stays the default -->
         <diff.DiffTool implementation="com.github.bpmncompare.BpmnDiffTool"/>
+        <!-- the diagrams above the text merge of a BPMN file; wraps the IDE's text merge, see BpmnMergeTool -->
+        <diff.merge.MergeTool implementation="com.github.bpmncompare.BpmnMergeTool"/>
     </extensions>
 
     <actions>

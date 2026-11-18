@@ -7,6 +7,7 @@ final class BpmnCompareSettings {
 
     private static final String SYNC_KEY = "bpmnCompare.syncNavigation";
     private static final String FOLLOW_CARET_KEY = "bpmnCompare.followCaret";
+    private static final String MERGE_DIAGRAMS_KEY = "bpmnCompare.mergeDiagramsVisible";
 
     private BpmnCompareSettings() {
     }
@@ -26,5 +27,14 @@ final class BpmnCompareSettings {
 
     static void setFollowCaretEnabled(boolean enabled) {
         PropertiesComponent.getInstance().setValue(FOLLOW_CARET_KEY, enabled, false);
+    }
+
+    /** Whether the merge window of a BPMN file shows the diagrams above the text merge. */
+    static boolean isMergeDiagramsVisible() {
+        return PropertiesComponent.getInstance().getBoolean(MERGE_DIAGRAMS_KEY, true);
+    }
+
+    static void setMergeDiagramsVisible(boolean visible) {
+        PropertiesComponent.getInstance().setValue(MERGE_DIAGRAMS_KEY, visible, true);
     }
 }
