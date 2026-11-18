@@ -1,7 +1,7 @@
 import { KINDS } from './changes.js';
 import { addBadge, clearDecorations, markHiddenChanges, tipOf } from './decorations.js';
 import { KIND_LABEL, describeAttrs, displayName } from './format.js';
-import { describeMerge, isOpen } from './merge-changes.js';
+import { STATE_LABEL, describeMerge, isOpen } from './merge-changes.js';
 import { canvasOf, elementOf } from './panes.js';
 
 /*
@@ -10,15 +10,6 @@ import { canvasOf, elementOf } from './panes.js';
  * the elements both sides changed.
  */
 
-/** How the change list and the badges call a result state. */
-export const STATE_LABEL = {
-  open: 'open',
-  ours: 'resolved – ours',
-  theirs: 'resolved – theirs',
-  both: 'resolved – both',
-  base: 'open',
-  other: 'resolved by hand'
-};
 
 /**
  * @param {Object<string, object>} panes the merge panes by side (`ours`, `result`, `base`, `theirs`)

@@ -5,7 +5,7 @@ import { createChangeList } from './change-list.js';
 import { toChangeList } from './changes.js';
 import { decorate, visibleKind } from './decorations.js';
 import { computeHistory, createElementMenu } from './element-menu.js';
-import { changesToMarkdown } from './export.js';
+import { changesToMarkdown, mergeToMarkdown } from './export.js';
 import { createExportMenu } from './export-menu.js';
 import { createFilter } from './filter.js';
 import { sendToHost } from './host.js';
@@ -91,7 +91,9 @@ const exportMenu = createExportMenu({
   panes,
 
   // only what the user can see, so the export matches the change list on screen
-  markdown: () => changesToMarkdown(visibleChanges(), currentLabels)
+  markdown: () => (inMerge()
+    ? mergeToMarkdown(visibleChanges(), currentMerge.states, currentMerge.labels, mergeDetails)
+    : changesToMarkdown(visibleChanges(), currentLabels))
 });
 const elementMenu = createElementMenu({
   panes,
@@ -142,6 +144,13 @@ function inMerge() {
   return document.body.dataset.mode === 'merge' && currentMerge;
 }
 
+/** The attribute lines of a merge entry, as the change list and the export show them. */
+function mergeDetails(entry) {
+  const { states, resultChanges } = currentMerge;
+
+  return detailsOf(entry, resultChanges.find((c) => c.id === entry.id), states.size > 0);
+}
+
 /** In merge mode, whether the filter shows an entry: both-sided ones by the conflict chip, the others by kind. */
 function isMergeEntryVisible(entry) {
   return entry.side === 'both' ? filter.kinds.has('conflict') : filter.kinds.has(entry.kind);
@@ -160,11 +169,9 @@ function visibleChanges() {
 function redrawChanges() {
   if (inMerge()) {
     const { entries, states, resultChanges } = currentMerge;
-    const hasResult = states.size > 0;
 
     decorateMerge(panes, entries, states, resultChanges, isMergeEntryVisible);
-    changeList.renderMerge(entries, states, isMergeEntryVisible, navigation.selectedId,
-      (entry) => detailsOf(entry, resultChanges.find((c) => c.id === entry.id), hasResult));
+    changeList.renderMerge(entries, states, isMergeEntryVisible, navigation.selectedId, mergeDetails);
     navigation.updateButtons();
     return;
   }

@@ -248,7 +248,7 @@ export function createMergeView({ panes, sync, zoom, Viewer, onRendered, onEleme
         fixed.theirs ? changesBetween(fixed.theirs, result) : []);
     }
 
-    onRendered({ entries, states, resultChanges, fresh, note: unavailableNote() });
+    onRendered({ entries, states, resultChanges, fresh, labels, note: unavailableNote() });
   }
 
   /** Why the changes are incomplete, or '' when ours, base and theirs could all be read. */

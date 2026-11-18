@@ -189,6 +189,34 @@ test.describe('merge view: the result', () => {
     expect(light).toBe('rgb(110, 110, 110)');
   });
 
+  test('a result updated behind the base is in view when switched back', async ({ page }) => {
+    await openMerge(page, { ours: { xml: '<broken', label: 'Ours' }, theirs: { xml: '<broken', label: 'Theirs' } });
+    await page.locator('#pane-result [data-middle="base"]').click();
+
+    await setResult(page, CURRENT);
+    await page.locator('#pane-base [data-middle="result"]').click();
+
+    const pane = await page.locator('#pane-result .canvas').boundingBox();
+    const task = await element(page, 'result', 'Task_Supplier').boundingBox();
+    expect(task).not.toBeNull();
+    expect(task.x).toBeGreaterThanOrEqual(pane.x);
+    expect(task.x + task.width).toBeLessThanOrEqual(pane.x + pane.width);
+    expect(task.y).toBeGreaterThanOrEqual(pane.y);
+    expect(task.y + task.height).toBeLessThanOrEqual(pane.y + pane.height);
+  });
+
+  test('panning while the result renders still moves the other panes', async ({ page }) => {
+    await openMerge(page);
+    await page.locator('#pane-ours .canvas').hover();
+
+    // the result renders while the user pans ours
+    await page.evaluate((xml) => window.bpmnCompare.setMergeResult({ xml, label: 'Result' }), CURRENT);
+    await page.mouse.wheel(0, 300);
+    await page.waitForFunction(() => !window.bpmnCompare.isRendering());
+
+    await expectSameRegionOf(page, 'ours', 'theirs');
+  });
+
   test('an unparsable side leaves the others working', async ({ page }) => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err));
@@ -352,6 +380,23 @@ test.describe('merge view: highlights and the change list', () => {
 
     await expect(badge(page, 'ours', 'Task_Check')).toHaveAttribute('data-tip',
       /name: "Check stock" → ours "Verify availability", theirs "Check warehouse stock", result "Check stock"/);
+  });
+
+  test('the export copies the merge as Markdown and offers nothing else', async ({ page }) => {
+    await openMerge(page);
+
+    await page.locator('#export').click();
+
+    await expect(page.locator('#export-menu li[data-command="copyMarkdown"]')).toBeVisible();
+    await expect(page.locator('#export-menu li[data-command="saveSvg"]')).toBeHidden();
+    await expect(page.locator('#export-menu li[data-command="savePng"]')).toBeHidden();
+
+    await page.locator('#export-menu li[data-command="copyMarkdown"]').click();
+
+    const [ message ] = await sentToHost(page, 'copyMarkdown');
+    expect(message.payload).toMatch(/^## BPMN merge\n\n`Changes from main` and `Changes from theirs`, base `Base`/);
+    expect(message.payload).toContain('### Changed on both sides (3 open of 3)');
+    expect(message.payload).toContain('Ship parcel (`Task_Ship`) – theirs, changed');
   });
 
   test('diff mode has no conflicts chip', async ({ page }) => {

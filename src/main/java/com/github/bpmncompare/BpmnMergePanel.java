@@ -4,6 +4,7 @@ import com.intellij.openapi.Disposable;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
+import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBCheckBox;
@@ -14,6 +15,7 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.datatransfer.StringSelection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -104,9 +106,19 @@ final class BpmnMergePanel extends JPanel implements Disposable {
 
     /** A message from the page; called on the browser thread. */
     private void handleHostRequest(Map<String, Object> message) {
-        if ("revealInResult".equals(message.get("command"))) {
-            String id = String.valueOf(message.get("id"));
-            webView.onEdt(() -> revealInResult.accept(id));
+        String command = String.valueOf(message.get("command"));
+        switch (command) {
+            case "revealInResult" -> {
+                String id = String.valueOf(message.get("id"));
+                webView.onEdt(() -> revealInResult.accept(id));
+            }
+            case "copyMarkdown" -> {
+                String markdown = String.valueOf(message.get("payload"));
+                webView.onEdt(() -> CopyPasteManager.getInstance().setContents(new StringSelection(markdown)));
+            }
+            default -> {
+                // the merge view has no element menu, SVG/PNG export or XML navigation
+            }
         }
     }
 

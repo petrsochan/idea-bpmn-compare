@@ -1,5 +1,6 @@
 import { KINDS } from './changes.js';
-import { describeAttrs, displayName, typeName } from './format.js';
+import { KIND_LABEL, describeAttrs, displayName, typeName } from './format.js';
+import { STATE_LABEL, isOpen } from './merge-changes.js';
 
 const KIND_TITLE = { added: 'Added', removed: 'Removed', changed: 'Changed', layout: 'Moved' };
 
@@ -39,6 +40,63 @@ export function changesToMarkdown(changes, labels) {
   }
 
   return lines.join('\n').trimEnd();
+}
+
+/**
+ * The change list of a merge as markdown, for the pull request or commit that resolves it: first what
+ * both sides changed, with whether the result has taken a side yet, then what one side changed.
+ *
+ * @param entries merge entries in change-list order, already filtered like the list on screen
+ * @param {Map<string, string>} states result state per element id (empty without a result)
+ * @param {{ ours: string, base: string, theirs: string }} labels
+ * @param {(entry) => string} details the attribute lines of an entry, as the change list shows them
+ */
+export function mergeToMarkdown(entries, states, labels, details) {
+  const lines = [ '## BPMN merge', '',
+    '`' + labels.ours + '` and `' + labels.theirs + '`, base `' + labels.base + '`', '' ];
+
+  if (!entries.length) {
+    lines.push('No differences.');
+
+    return lines.join('\n');
+  }
+
+  const both = entries.filter((entry) => entry.side === 'both');
+  const oneSided = entries.filter((entry) => entry.side !== 'both');
+
+  if (both.length) {
+    const open = both.filter((entry) => isOpen(entry, states)).length;
+    lines.push('### Changed on both sides (' + open + ' open of ' + both.length + ')', '');
+
+    for (const entry of both) {
+      const state = isOpen(entry, states) ? 'open' : STATE_LABEL[states.get(entry.id)];
+      lines.push('- **' + typeName(entry) + '** ' + nameAndId(entry) + ' – '
+        + (entry.conflict ? 'conflict' : 'both changed') + ', ' + state);
+      pushDetails(lines, details(entry));
+    }
+
+    lines.push('');
+  }
+
+  if (oneSided.length) {
+    lines.push('### Changed on one side (' + oneSided.length + ')', '');
+
+    for (const entry of oneSided) {
+      lines.push('- **' + typeName(entry) + '** ' + nameAndId(entry) + ' – '
+        + entry.side + ', ' + KIND_LABEL[entry.kind].toLowerCase());
+      pushDetails(lines, details(entry));
+    }
+
+    lines.push('');
+  }
+
+  return lines.join('\n').trimEnd();
+}
+
+function pushDetails(lines, text) {
+  for (const line of (text || '').split('\n').filter(Boolean)) {
+    lines.push('  - ' + line);
+  }
 }
 
 /** An unnamed element is shown by its id alone, rather than having it printed twice. */

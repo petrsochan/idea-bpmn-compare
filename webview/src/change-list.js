@@ -1,8 +1,7 @@
 import { KINDS } from './changes.js';
 import { visibleKind } from './decorations.js';
 import { KIND_LABEL, describeAttrs, displayName, typeName } from './format.js';
-import { isOpen } from './merge-changes.js';
-import { STATE_LABEL } from './merge-decorations.js';
+import { STATE_LABEL, isOpen } from './merge-changes.js';
 import { setTip } from './tooltips.js';
 
 /**

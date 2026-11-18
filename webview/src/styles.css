@@ -173,7 +173,9 @@ button.chip:hover { border-color: var(--accent); }
 body:not([data-mode="merge"]) .merge-pane { display: none; }
 body[data-mode="merge"] #pane-left,
 body[data-mode="merge"] #pane-right,
-body[data-mode="merge"] #export-wrap { display: none; }
+/* the merge exports only its change list: there is no single diagram the SVG/PNG export would mean */
+body[data-mode="merge"] #export-menu [data-command="saveSvg"],
+body[data-mode="merge"] #export-menu [data-command="savePng"] { display: none; }
 body:not([data-mode="merge"]) .chip.conflict { display: none; }
 .pane[hidden] { display: none; }
 

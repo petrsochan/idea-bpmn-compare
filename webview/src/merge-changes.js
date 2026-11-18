@@ -12,6 +12,16 @@ import { displayName, formatValue } from './format.js';
  *             ours: object|null, theirs: object|null, model: object }} MergeEntry
  */
 
+/** How the change list, the badges and the export call a result state. */
+export const STATE_LABEL = {
+  open: 'open',
+  ours: 'resolved – ours',
+  theirs: 'resolved – theirs',
+  both: 'resolved – both',
+  base: 'open',
+  other: 'resolved by hand'
+};
+
 /** The states of an element in the result, see {@link resultStates}. */
 export const RESULT_STATES = [ 'ours', 'theirs', 'both', 'base', 'other' ];
 

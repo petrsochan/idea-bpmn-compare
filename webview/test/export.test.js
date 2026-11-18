@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { changesToMarkdown } from '../src/export.js';
+import { changesToMarkdown, mergeToMarkdown } from '../src/export.js';
 
 function change(id, kind, name, type, attrs) {
   return { id, kind, kinds: new Set([ kind ]), model: { name, $type: 'bpmn:' + type }, attrs: attrs || null };
@@ -58,4 +58,43 @@ test('an empty change list says so instead of printing empty headings', () => {
 
   assert.match(markdown, /No differences/);
   assert.doesNotMatch(markdown, /###/);
+});
+
+// ---- merge ----
+
+function entry(id, side, kind, name, type, extra = {}) {
+  return { id, side, kind, conflict: false, model: { name, $type: 'bpmn:' + type }, ours: null, theirs: null, ...extra };
+}
+
+const mergeEntries = [
+  entry('Task_Review', 'both', 'removed', 'Manual review', 'Task', { conflict: true }),
+  entry('End_Hold', 'both', 'changed', 'Held', 'EndEvent'),
+  entry('Task_Ship', 'theirs', 'changed', 'Ship parcel', 'Task'),
+  entry('Task_Supplier', 'ours', 'added', 'Order from supplier', 'Task')
+];
+
+const mergeLabels = { ours: 'Ours · HEAD', base: 'Base', theirs: 'Theirs · MERGE_HEAD' };
+const details = (e) => (e.id === 'Task_Review' ? 'Removed by ours\nname: "Manual review" → theirs "Manual check"' : '');
+
+test('a merge starts with a heading naming the sides', () => {
+  const markdown = mergeToMarkdown(mergeEntries, new Map(), mergeLabels, details);
+
+  assert.match(markdown, /^## BPMN merge\n\n`Ours · HEAD` and `Theirs · MERGE_HEAD`, base `Base`\n/);
+});
+
+test('a merge lists what both sides changed first, with whether it is open', () => {
+  const states = new Map([ [ 'Task_Review', 'base' ], [ 'End_Hold', 'theirs' ] ]);
+  const markdown = mergeToMarkdown(mergeEntries, states, mergeLabels, details);
+
+  assert.match(markdown, /### Changed on both sides \(1 open of 2\)\n\n- \*\*Task\*\* Manual review \(`Task_Review`\) – conflict, open\n  - Removed by ours\n  - name: "Manual review" → theirs "Manual check"\n- \*\*EndEvent\*\* Held \(`End_Hold`\) – both changed, resolved – theirs\n/);
+});
+
+test('a merge lists the one-sided changes with their side', () => {
+  const markdown = mergeToMarkdown(mergeEntries, new Map(), mergeLabels, details);
+
+  assert.match(markdown, /### Changed on one side \(2\)\n\n- \*\*Task\*\* Ship parcel \(`Task_Ship`\) – theirs, changed\n- \*\*Task\*\* Order from supplier \(`Task_Supplier`\) – ours, added$/);
+});
+
+test('a merge without changes says so', () => {
+  assert.match(mergeToMarkdown([], new Map(), mergeLabels, details), /No differences\.$/);
 });
