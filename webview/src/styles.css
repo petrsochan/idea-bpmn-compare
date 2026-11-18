@@ -392,10 +392,9 @@ body[data-merge-result="false"] .middle-switch { display: none; }
 
 /* ---- merge markers ---- */
 
-/* an element both sides changed: a thick outline over whatever the change kind drew. The conflict is the
-   loudest marker; once the result has taken a side it drops to the quieter both-changed look. */
-.djs-shape.merge-conflict .djs-visual > :nth-child(1) { stroke: var(--conflict) !important; stroke-width: 4px !important; stroke-dasharray: none !important; }
-.djs-connection.merge-conflict .djs-visual > path { stroke: var(--conflict) !important; stroke-width: 4px !important; stroke-dasharray: none !important; }
+/* an element both sides changed: a thick outline over whatever the change kind drew. The conflict (below,
+   after the result states) is the loudest marker; once the result has taken a side it drops to the quieter
+   both-changed look, and in the result pane the result state wins over that. */
 .djs-shape.merge-both .djs-visual > :nth-child(1) { stroke: var(--both) !important; stroke-width: 3px !important; stroke-dasharray: 2 3 !important; }
 .djs-connection.merge-both .djs-visual > path { stroke: var(--both) !important; stroke-width: 3px !important; stroke-dasharray: 2 3 !important; }
 
@@ -410,3 +409,8 @@ body[data-merge-result="false"] .middle-switch { display: none; }
 .djs-connection.result-base .djs-visual > path { stroke: var(--result-base) !important; stroke-width: 2px !important; stroke-dasharray: 4 3 !important; }
 .djs-shape.result-other .djs-visual > :nth-child(1) { stroke: var(--changed) !important; stroke-width: 2.5px !important; }
 .djs-connection.result-other .djs-visual > path { stroke: var(--changed) !important; stroke-width: 2.5px !important; }
+
+/* last, so it wins over the result state: an open conflict in the result still holds the base value, which
+   alone would draw it as a quiet grey */
+.djs-shape.merge-conflict .djs-visual > :nth-child(1) { stroke: var(--conflict) !important; stroke-width: 4px !important; stroke-dasharray: none !important; }
+.djs-connection.merge-conflict .djs-visual > path { stroke: var(--conflict) !important; stroke-width: 4px !important; stroke-dasharray: none !important; }

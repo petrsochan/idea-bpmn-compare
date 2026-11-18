@@ -26,7 +26,11 @@
           and <i>Follow caret</i> selects the element you are editing.</li>
       <li><b>Export</b> – the change list as Markdown for a pull request, or the diagram with its markers as SVG or PNG.</li>
       <li><b>Merge conflicts</b> – ours, the result as it is being resolved, and theirs as diagrams above the IDE's
-          text merge, with the elements both sides changed marked and the open conflicts counted.</li>
+          text merge, with the elements both sides changed marked and the open conflicts counted; also in the
+          BPMN Diff tab of a file left in conflict. Meant for merging smaller changes.
+          <p><img src="https://raw.githubusercontent.com/petrsochan/idea-bpmn-compare/main/docs/images/merge.png"
+                  alt="A merge halfway resolved: ours, the result and theirs, with the open conflict outlined in every diagram"
+                  width="700"/></p></li>
       <li><b>Synchronized</b> cursor, hover, pan and zoom between both diagrams.</li>
     </ul>
     Open a <code>.bpmn</code> file and switch to the <b>BPMN Diff</b> tab, or use

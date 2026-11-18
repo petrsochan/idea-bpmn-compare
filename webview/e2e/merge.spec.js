@@ -267,6 +267,17 @@ test.describe('merge view: highlights and the change list', () => {
     }
   });
 
+  test('an open conflict is drawn loudest in the result too', async ({ page }) => {
+    await openMerge(page);
+    const stroke = (side) => page.locator('#pane-' + side + ' .djs-element[data-element-id="Task_Check"] .djs-visual > :nth-child(1)')
+      .evaluate((node) => getComputedStyle(node).stroke);
+
+    // the result still has the base value, which would draw it grey - the conflict must win
+    await expect(element(page, 'result', 'Task_Check')).toHaveClass(/result-base/);
+    expect(await stroke('result')).toBe('rgb(192, 19, 107)');
+    expect(await stroke('theirs')).toBe('rgb(192, 19, 107)');
+  });
+
   test('both changed is quieter than a conflict', async ({ page }) => {
     await openMerge(page);
 

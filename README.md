@@ -47,6 +47,8 @@ Visual comparison of BPMN diagrams with any Git revision, powered by [bpmn.io](h
   in the diagrams. *Export* copies the change list of the merge as Markdown. Resolving stays in the text merge; *Show BPMN Diagrams* in its toolbar hides the diagrams (remembered).
   The diagrams help with merging smaller changes – a few renamed, moved or added elements; they make no claim to
   untangle complex merges, where the text merge remains the tool.
+
+  ![A merge halfway resolved: ours, the result and theirs above the text merge. The rename of "Check stock" is resolved with ours, "Manual review" - removed by ours, renamed by theirs - is still an open conflict outlined in every diagram, and the Conflicts chip shows 2 of 3 open](docs/images/merge.png)
 - **Conflict in the BPMN Diff tab** – while the file is in conflict (after a merge or rebase on the command line,
   or with the merge window closed unresolved), the tab shows ours | base | theirs from the Git index with the same
   highlights, and **Resolve…** opens the merge window. Once the conflict is gone the tab compares with the revision
