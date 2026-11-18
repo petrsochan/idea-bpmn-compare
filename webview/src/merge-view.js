@@ -24,7 +24,8 @@ const INVALID_RESULT = 'The result is not valid BPMN right now – showing the l
  * @param {ReturnType<import('./zoom.js').createZoom>} options.zoom
  * @param {Function} options.Viewer the bpmn-js viewer class
  * @param {(xml: string) => Promise} options.parse rejects for XML that is not BPMN
- * @param {(merge: { entries, states, resultChanges }) => void} options.onRendered after every render
+ * @param {(merge: { entries, states, resultChanges, fresh, note }) => void} options.onRendered after every render;
+ *   `fresh` for a new merge, `note` says why the changes are incomplete ('' when they are not)
  */
 export function createMergeView({ panes, sync, zoom, Viewer, parse, onRendered }) {
   let middle = 'result';
@@ -34,6 +35,9 @@ export function createMergeView({ panes, sync, zoom, Viewer, parse, onRendered }
 
   /** The last valid result. */
   let result = null;
+
+  /** Labels of ours, base and theirs, for naming a side that cannot be read. */
+  let labels = {};
 
   function ensurePanes() {
     if (panes.ours) {
@@ -114,6 +118,12 @@ export function createMergeView({ panes, sync, zoom, Viewer, parse, onRendered }
       importInto(panes.theirs, payload.theirs || {})
     ]);
 
+    labels = {
+      ours: (payload.ours && payload.ours.label) || 'Ours',
+      base: (payload.base && payload.base.label) || 'Base',
+      theirs: (payload.theirs && payload.theirs.label) || 'Theirs'
+    };
+
     const elements = (pane) => (pane.loaded ? collectFlowElements(pane) : {});
     fixed = {
       ours: ours && { defs: ours, elements: elements(panes.ours) },
@@ -147,7 +157,7 @@ export function createMergeView({ panes, sync, zoom, Viewer, parse, onRendered }
       sync.copyViewbox(leader, panes.base);
     }
 
-    rendered();
+    rendered(true);
   }
 
   /** Replaces the result, keeping where each pane looks. */
@@ -197,7 +207,8 @@ export function createMergeView({ panes, sync, zoom, Viewer, parse, onRendered }
     }
   }
 
-  function rendered() {
+  /** @param {boolean} [fresh] a new merge, not just a new result */
+  function rendered(fresh = false) {
     const { entries } = fixed;
     let states = new Map();
     let resultChanges = [];
@@ -209,7 +220,22 @@ export function createMergeView({ panes, sync, zoom, Viewer, parse, onRendered }
         fixed.theirs ? changesBetween(fixed.theirs, result) : []);
     }
 
-    onRendered({ entries, states, resultChanges });
+    onRendered({ entries, states, resultChanges, fresh, note: unavailableNote() });
+  }
+
+  /** Why the changes are incomplete, or '' when ours, base and theirs could all be read. */
+  function unavailableNote() {
+    if (!fixed.base) {
+      return 'The base is not available – the changes cannot be classified.';
+    }
+
+    const unreadable = [ 'ours', 'theirs' ].filter((side) => !fixed[side]);
+
+    if (unreadable.length === 2) {
+      return 'Neither side can be read – there are no changes to show.';
+    }
+
+    return unreadable.length ? labels[unreadable[0]] + " cannot be read – only the other side's changes are shown." : '';
   }
 
   return { setMerge, setMergeResult, setMiddle, setMode };

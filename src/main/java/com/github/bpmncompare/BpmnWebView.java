@@ -23,10 +23,12 @@ import org.cef.network.CefRequest;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import java.awt.event.HierarchyEvent;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * The bpmn.io page in JCEF and the bridge to it: {@code window.bpmnCompare} for calls into the page,
@@ -48,6 +50,8 @@ final class BpmnWebView implements Disposable {
     private JBCefJSQuery hostQuery;
     private boolean ready;
     private volatile boolean disposed;
+    /** The modality of the owner's window, kept from when it was last shown; see {@link #modality()}. */
+    private volatile @Nullable ModalityState modality;
 
     /**
      * @param owner         the Swing component the browser is shown in, for the modality
@@ -58,13 +62,43 @@ final class BpmnWebView implements Disposable {
         this.owner = owner;
         this.onPageReady = onPageReady;
         this.onHostMessage = onHostMessage;
+        // read on the EDT while the owner is in its window: the browser thread asks later, possibly after
+        // the owner was taken out of the window (the merge window can hide the diagrams), when there is
+        // no window to read it from any more
+        owner.addHierarchyListener(event -> {
+            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && owner.isShowing()) {
+                modality = ModalityState.stateForComponent(owner);
+            }
+        });
     }
 
-    /** Creates the browser and loads the page; {@code null} when JCEF is not available in this IDE. */
+    /**
+     * Creates the browser and loads the page; {@code null} when JCEF is not available in this IDE or the
+     * browser cannot be created - the caller shows a note instead, and must keep working without the page.
+     */
     @Nullable JComponent create() {
         if (!JBCefApp.isSupported()) {
             return null;
         }
+        if (owner.isShowing()) {
+            modality = ModalityState.stateForComponent(owner);
+        }
+        // JCEF can be supported and still fail to start (GPU, sandbox, a broken runtime); in the merge window
+        // nothing catches that, and the text merge must not go down with the diagrams
+        return createOrNull(this::createBrowser, e -> LOG.warn("Cannot create the BPMN web view", e));
+    }
+
+    /** {@code create.get()}, or {@code null} after handing its failure to {@code onFailure}. */
+    static <T> @Nullable T createOrNull(Supplier<T> create, Consumer<Throwable> onFailure) {
+        try {
+            return create.get();
+        } catch (Throwable e) {
+            onFailure.accept(e);
+            return null;
+        }
+    }
+
+    private JComponent createBrowser() {
         browser = JBCefBrowser.createBuilder().build();
         Disposer.register(this, browser);
         installHostBridge();
@@ -118,9 +152,10 @@ final class BpmnWebView implements Disposable {
         call("setTheme", theme);
     }
 
-    /** The modality of the window the page is shown in. */
+    /** The modality of the window the page is shown in, as of when it was last shown. */
     ModalityState modality() {
-        return ModalityState.stateForComponent(owner);
+        ModalityState known = modality;
+        return known != null ? known : ModalityState.stateForComponent(owner);
     }
 
     /** Runs {@code action} on the EDT in the page's modality, unless the view is gone by then. */

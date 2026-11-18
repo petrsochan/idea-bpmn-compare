@@ -102,13 +102,26 @@ const mergeView = createMergeView({
   Viewer: NavigatedViewer,
   parse: (xml) => new BpmnModdle().fromXML(xml),
   onRendered: (merge) => {
-    currentMerge = { ...merge, entries: orderEntries(merge.entries, merge.states) };
+    // the order is set when a merge is shown and kept while the user resolves it: rows that jumped
+    // as their conflict got resolved would make F7 skip the open conflicts after the current one
+    const entries = merge.fresh || !currentMerge
+      ? orderEntries(merge.entries, merge.states)
+      : inOrderOf(currentMerge.entries, merge.entries);
+
+    currentMerge = { ...merge, entries };
     navigation.retainSelection(currentMerge.entries);
-    changeList.renderMergeSummary(currentMerge.entries, currentMerge.states);
+    changeList.renderMergeSummary(currentMerge.entries, currentMerge.states, merge.note);
     redrawChanges();
     zoom.updateControls();
   }
 });
+
+/** `entries` in the order of `ordered` (the same elements, as they do not change during a merge). */
+function inOrderOf(ordered, entries) {
+  const byId = new Map(entries.map((entry) => [ entry.id, entry ]));
+
+  return ordered.map((entry) => byId.get(entry.id)).filter(Boolean);
+}
 
 /** The merge shown in merge mode: entries in change-list order, result states, changes base → result. */
 let currentMerge = null;

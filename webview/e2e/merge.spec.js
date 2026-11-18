@@ -259,6 +259,32 @@ test.describe('merge view: highlights and the change list', () => {
     expect(await selectedChange(page)).toEqual([ 'Task_Review' ]);
   });
 
+  test('F7 after resolving the selected conflict goes on to the next open one', async ({ page }) => {
+    await openMerge(page);
+    await page.locator('#pane-ours header').click();
+    await page.keyboard.press('F7');
+    expect(await selectedChange(page)).toEqual([ 'Task_Review' ]);
+
+    // the user takes theirs for Task_Review in the text merge
+    await setResult(page, REVISION.replace('name="Manual review"', 'name="Manual check"'));
+    await page.locator('#pane-ours header').click();
+    await page.keyboard.press('F7');
+
+    expect(await selectedChange(page)).toEqual([ 'Task_Check' ]);
+  });
+
+  test('missing base says the changes cannot be classified', async ({ page }) => {
+    await openMerge(page, { base: { xml: '', label: 'Base' } });
+
+    await expect(page.locator('#summary-note')).toHaveText('The base is not available – the changes cannot be classified.');
+  });
+
+  test('an unreadable side is named in the summary', async ({ page }) => {
+    await openMerge(page, { theirs: { xml: '<broken', label: 'Changes from theirs' } });
+
+    await expect(page.locator('#summary-note')).toHaveText("Changes from theirs cannot be read – only the other side's changes are shown.");
+  });
+
   test('hiding conflicts leaves the one-sided changes', async ({ page }) => {
     await openMerge(page);
 

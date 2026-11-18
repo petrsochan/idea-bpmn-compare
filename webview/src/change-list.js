@@ -89,8 +89,9 @@ export function createChangeList({ onPick, onToggle }) {
   /**
    * The counts of a merge: the kind chips count what one side changed, the conflict chip the elements
    * both sides changed - how many of them the result has not taken a side on yet, of how many.
+   * `note` replaces the summary note, e.g. when a side could not be read.
    */
-  function renderMergeSummary(entries, states) {
+  function renderMergeSummary(entries, states, note = '') {
     const counts = { added: 0, removed: 0, changed: 0, layout: 0 };
     let both = 0;
     let open = 0;
@@ -109,7 +110,7 @@ export function createChangeList({ onPick, onToggle }) {
     }
 
     document.querySelector('.chip.conflict b').textContent = open + ' / ' + both;
-    document.getElementById('summary-note').textContent = entries.length ? '' : 'No differences';
+    document.getElementById('summary-note').textContent = note || (entries.length ? '' : 'No differences');
   }
 
   /**
